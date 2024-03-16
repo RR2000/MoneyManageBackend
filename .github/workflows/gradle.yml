@@ -32,7 +32,13 @@ jobs:
       - name: Print Contents of Gradle Wrapper Batch Script
         run: cat MoneyManageAPI/gradlew.bat
 
-      - name: Print Gradle Wrapper Script Permissions
+      - name: Print Gradle Wrapper Script Permissions Before
+        run: ls -l MoneyManageAPI/gradlew.bat
+
+      - name: Set Gradle Wrapper Script Permissions
+        run: chmod 777 MoneyManageAPI/gradlew.bat
+
+      - name: Print Gradle Wrapper Script Permissions After
         run: ls -l MoneyManageAPI/gradlew.bat
 
       - name: Setup Gradle
