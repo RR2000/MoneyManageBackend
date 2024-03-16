@@ -29,26 +29,26 @@ jobs:
       - name: List Files in Project Directory
         run: ls -R
 
-      - name: Print Contents of Gradle Wrapper Batch Script
-        run: cat MoneyManageAPI/gradlew.bat
+      - name: Print Contents of Gradle Wrapper Script
+        run: cat MoneyManageAPI/gradlew
 
       - name: Print Gradle Wrapper Script Permissions Before
-        run: ls -l MoneyManageAPI/gradlew.bat
+        run: ls -l MoneyManageAPI/gradlew
 
       - name: Set Gradle Wrapper Script Permissions
-        run: chmod 777 MoneyManageAPI/gradlew.bat
+        run: chmod 777 MoneyManageAPI/gradlew
 
       - name: Print Gradle Wrapper Script Permissions After
-        run: ls -l MoneyManageAPI/gradlew.bat
+        run: ls -l MoneyManageAPI/gradlew
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@417ae3ccd767c252f5661f1ace9f835f9654f2b5
         with:
           gradle-version: '7.3'
-          gradle-wrapper: MoneyManageAPI/gradlew.bat
+          gradle-wrapper: MoneyManageAPI/gradlew
 
       - name: Build with Gradle Wrapper
-        run: MoneyManageAPI/gradlew.bat build
+        run: MoneyManageAPI/gradlew build
 
   dependency-submission:
 
