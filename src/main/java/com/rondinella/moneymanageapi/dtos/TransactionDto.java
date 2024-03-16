@@ -2,7 +2,7 @@ package com.rondinella.moneymanageapi.dtos;
 
 import com.rondinella.moneymanageapi.enitities.Transaction;
 import io.swagger.annotations.ApiModel;
-import io.swagger.annotations.ApiModelProperty;
+import jakarta.persistence.Id;
 import lombok.Value;
 
 import java.io.Serializable;
@@ -15,10 +15,14 @@ import java.sql.Timestamp;
 @ApiModel(description = "DTO for representing a transaction")
 @Value
 public class TransactionDto implements Serializable {
-
-  @ApiModelProperty(value = "Timestamp of the transaction", example = "2022-03-17T10:15:30Z")
-  Timestamp timestamp;
-
-  @ApiModelProperty(value = "Value of the transaction", example = "100.0")
-  BigDecimal value;
+  @Id
+  String account;
+  @Id
+  Timestamp startedDate;
+  @Id
+  Timestamp completedDate;
+  String description;
+  BigDecimal amount;
+  BigDecimal fee;
+  String currency;
 }

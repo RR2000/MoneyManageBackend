@@ -1,11 +1,11 @@
 package com.rondinella.moneymanageapi.services;
 
 import com.rondinella.moneymanageapi.dtos.TransactionDto;
+import com.rondinella.moneymanageapi.enitities.Transaction;
 import com.rondinella.moneymanageapi.mappers.TransactionMapper;
 import com.rondinella.moneymanageapi.repositories.TransactionRepository;
 import org.springframework.stereotype.Service;
 
-import java.net.URI;
 import java.util.List;
 
 @Service
@@ -22,8 +22,9 @@ public class TransactionService {
     return transactionMapper.toDto(transactionRepository.findAll());
   }
 
-  public URI addTransaction(TransactionDto transactionDto) {
-    transactionRepository.saveAndFlush(transactionMapper.toEntity(transactionDto));
-    return null;
+  public List<TransactionDto> addTransaction(List<TransactionDto> transactionDto) {
+    List<Transaction> txToAdd = transactionMapper.toEntity(transactionDto);
+    List<Transaction> txAdded = transactionRepository.saveAllAndFlush(txToAdd);
+    return transactionMapper.toDto(txAdded);
   }
 }
