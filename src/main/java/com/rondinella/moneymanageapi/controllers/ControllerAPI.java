@@ -3,10 +3,12 @@ package com.rondinella.moneymanageapi.controllers;
 import com.rondinella.moneymanageapi.dtos.TransactionDto;
 import com.rondinella.moneymanageapi.services.TransactionService;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.File;
 import java.util.List;
 
 @RestController
@@ -26,25 +28,11 @@ public class ControllerAPI {
 
   @PostMapping
   public ResponseEntity<?> createTransaction(@RequestBody List<TransactionDto> transactionsDto) {
-    return ResponseEntity.status(HttpStatus.CREATED).body(transactionService.addTransaction(transactionsDto));
+    return ResponseEntity.status(HttpStatus.CREATED).body(transactionService.addTransactions(transactionsDto));
   }
 
-  @PostMapping("/upload")
-  public ResponseEntity<?> uploadTransactions(@RequestParam("file") MultipartFile file) {
-    if (file.isEmpty()) {
-      return ResponseEntity.badRequest().body("Please upload a file.");
-    }
-    return null;/*
-    try {
-      List<TransactionDto> transactions = transactionService.readTransactionsFromCSV(file);
-      // Save transactions to the database
-      for (TransactionDto transaction : transactions) {
-        transactionService.addTransaction(transaction);
-      }
-      return ResponseEntity.status(HttpStatus.CREATED).body("Transactions uploaded successfully.");
-    } catch (IOException e) {
-      e.printStackTrace();
-      return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Failed to parse CSV file.");
-    }*/
+  @PostMapping(value = "/upload", consumes = "text/csv")
+  public ResponseEntity<?> uploadTransactions(@RequestBody String csvData) {
+    return ResponseEntity.status(HttpStatus.CREATED).body(transactionService.addTransactionsFromCsv(csvData));
   }
 }
