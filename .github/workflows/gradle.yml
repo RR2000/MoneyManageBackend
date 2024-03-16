@@ -30,7 +30,7 @@ jobs:
         run: ls -R
 
       - name: Change Directory to MoneyManageAPI
-        run: cd MoneyManage/MoneyManageAPI
+        run: cd MoneyManageAPI
 
       - name: Print Current Directory
         run: pwd
