@@ -30,13 +30,13 @@ jobs:
       run: ls -R
 
     - name: Print Contents of Gradle Wrapper Script
-      run: cat MoneyManage/MoneyManageAPI/gradlew
+      run: cat MoneyManageAPI/gradlew
 
     - name: Setup Gradle
       uses: gradle/actions/setup-gradle@417ae3ccd767c252f5661f1ace9f835f9654f2b5 # v3.1.0
 
     - name: Build with Gradle Wrapper
-      run: ./MoneyManage/MoneyManageAPI/gradlew build
+      run: ./MoneyManageAPI/gradlew build
 
   dependency-submission:
 
