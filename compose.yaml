@@ -1,0 +1,19 @@
+version: '3.8'
+services:
+  db:
+    image: mysql:latest  # Use the MySQL image
+    ports:
+      - '3306:3306'  # MySQL default port
+    environment:
+      MYSQL_DATABASE: MoneyManageDB  # Name of the database to be created
+      MYSQL_ROOT_PASSWORD: change-me
+    volumes:
+      - db:/var/lib/mysql  # MySQL data directory volume
+
+# You can also use MariaDB instead of MySQL if you prefer
+# To use MariaDB, replace the 'image' line with the following:
+#   image: mariadb:latest
+
+volumes:
+  db:
+    driver: local
