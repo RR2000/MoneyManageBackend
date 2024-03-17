@@ -3,12 +3,9 @@ package com.rondinella.moneymanageapi.controllers;
 import com.rondinella.moneymanageapi.dtos.TransactionDto;
 import com.rondinella.moneymanageapi.services.TransactionService;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.multipart.MultipartFile;
 
-import java.io.File;
 import java.util.List;
 
 @RestController
@@ -23,7 +20,17 @@ public class ControllerAPI {
 
   @GetMapping
   public ResponseEntity<?> getAllTransactions() {
-    return ResponseEntity.ok(transactionService.findAllTransactions());
+    return new ResponseEntity<>(transactionService.findAllTransactions(), HttpStatus.CREATED);
+  }
+
+  @GetMapping("/accounts/{accountName}")
+  public ResponseEntity<?> getTransactionsByAccountName(@PathVariable String accountName) {
+    return new ResponseEntity<>(transactionService.findTransactionsByAccount(accountName), HttpStatus.FOUND);
+  }
+
+  @GetMapping("/accounts")
+  public ResponseEntity<?> getAllAccounts() {
+    return ResponseEntity.status(HttpStatus.FOUND).body(transactionService.findAllAccounts());
   }
 
   @PostMapping

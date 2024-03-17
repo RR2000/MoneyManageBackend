@@ -3,7 +3,6 @@ package com.rondinella.moneymanageapi.mappers;
 import com.rondinella.moneymanageapi.dtos.TransactionDto;
 import com.rondinella.moneymanageapi.enitities.Transaction;
 import org.mapstruct.Mapper;
-import org.mapstruct.Mapping;
 
 import java.math.BigDecimal;
 import java.sql.Timestamp;
@@ -15,9 +14,11 @@ public interface TransactionMapper {
   TransactionMapper INSTANCE = new TransactionMapperImpl(); // Singleton instance
 
   TransactionDto toDto(Transaction entity);
+
   Transaction toEntity(TransactionDto entity);
 
   List<TransactionDto> toDto(List<Transaction> entity);
+
   List<Transaction> toEntity(List<TransactionDto> entity);
 
   default TransactionDto toDto(Map<String, Object> rowData) {
@@ -25,12 +26,12 @@ public interface TransactionMapper {
       return null;
     }
     TransactionDto dto = new TransactionDto();
-    dto.setAccount("Revolut");
+    dto.setAccount("Revolut_" + rowData.get("Product"));
     dto.setStartedDate(Timestamp.valueOf((String) rowData.get("Started Date")));
     dto.setCompletedDate(Timestamp.valueOf((String) rowData.get("Completed Date")));
     dto.setDescription((String) rowData.get("Description"));
-    dto.setAmount(new BigDecimal((String)rowData.get("Amount")));
-    dto.setFee(new BigDecimal((String)rowData.get("Fee")));
+    dto.setAmount(new BigDecimal((String) rowData.get("Amount")));
+    dto.setFee(new BigDecimal((String) rowData.get("Fee")));
     dto.setCurrency((String) rowData.get("Currency"));
     return dto;
   }

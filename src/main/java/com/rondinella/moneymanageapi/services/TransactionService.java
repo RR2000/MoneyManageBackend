@@ -28,6 +28,14 @@ public class TransactionService {
     return transactionMapper.toDto(transactionRepository.findAll());
   }
 
+  public List<TransactionDto> findTransactionsByAccount(String accountName) {
+    return transactionMapper.toDto(transactionRepository.findTransactionByAccountOrderByCompletedDate(accountName));
+  }
+
+  public List<String> findAllAccounts(){
+    return transactionRepository.findDistinctAccounts();
+  }
+
   public List<TransactionDto> addTransactions(List<TransactionDto> transactionDto) {
     List<Transaction> txToAdd = transactionMapper.toEntity(transactionDto);
     List<Transaction> txAdded = transactionRepository.saveAllAndFlush(txToAdd);
@@ -73,4 +81,5 @@ public class TransactionService {
     }
 
   }
+
 }
