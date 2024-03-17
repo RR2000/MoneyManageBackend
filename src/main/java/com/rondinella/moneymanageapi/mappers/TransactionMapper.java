@@ -6,6 +6,7 @@ import org.mapstruct.Mapper;
 
 import java.math.BigDecimal;
 import java.sql.Timestamp;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 
@@ -28,7 +29,10 @@ public interface TransactionMapper {
     TransactionDto dto = new TransactionDto();
     dto.setAccount("Revolut_" + rowData.get("Product"));
     dto.setStartedDate(Timestamp.valueOf((String) rowData.get("Started Date")));
-    dto.setCompletedDate(Timestamp.valueOf((String) rowData.get("Completed Date")));
+    if (rowData.get("State").equals("PENDING"))
+      dto.setCompletedDate(Timestamp.valueOf((String) rowData.get("Started Date")));
+    else
+      dto.setCompletedDate(Timestamp.valueOf((String) rowData.get("Completed Date")));
     dto.setDescription((String) rowData.get("Description"));
     dto.setAmount(new BigDecimal((String) rowData.get("Amount")));
     dto.setFee(new BigDecimal((String) rowData.get("Fee")));

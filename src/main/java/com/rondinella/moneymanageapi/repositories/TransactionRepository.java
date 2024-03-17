@@ -12,4 +12,8 @@ public interface TransactionRepository extends JpaRepository<Transaction, Timest
   List<String> findDistinctAccounts();
 
   List<Transaction> findTransactionByAccountOrderByCompletedDate(String account);
+
+  List<Transaction> findTransactionByAccountAndCompletedDateGreaterThanOrderByCompletedDateDesc(String account, Timestamp day);
+
+  List<Transaction> findByCompletedDateBetween(Timestamp startTimestamp, Timestamp endTimestamp);
 }
