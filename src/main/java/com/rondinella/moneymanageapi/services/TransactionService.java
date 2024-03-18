@@ -14,7 +14,10 @@ import java.math.BigDecimal;
 import java.sql.Date;
 import java.sql.Timestamp;
 import java.time.LocalDate;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 @Service
 public class TransactionService {
@@ -41,6 +44,20 @@ public class TransactionService {
 
   public List<String> findAllAccounts() {
     return transactionRepository.findDistinctAccounts();
+  }
+
+  public boolean computeCumulativeAmount(String account, BigDecimal todayMoney) {
+    List<Transaction> transactions = transactionRepository.findTransactionByAccountOrderByCompletedDateDesc(account);
+
+    BigDecimal cumulative = todayMoney.add(transactions.get(0).getAmount()); // Initialize with today's money
+    for (Transaction transaction : transactions) {
+      cumulative = cumulative.subtract(transaction.getAmount()); // Add current transaction's amount
+      transaction.setCumulativeAmount(cumulative); // Set cumulative amount for the transaction
+    }
+
+    transactionRepository.saveAllAndFlush(transactions);
+
+    return true;
   }
 
   public BigDecimal amountOnThatDay(String accountName, Timestamp thatDay) {
@@ -82,8 +99,13 @@ public class TransactionService {
       BigDecimal amount = transaction.getAmount().add(transaction.getFee());
 
       Map<Date, BigDecimal> accountSummary = accountSummariesMap.get(account);
-      accountSummary.put(date, accountSummary.get(date).subtract(amount));
+      accountSummary.put(date, accountSummary.get(date).add(amount));
     }
+
+    Map<String, BigDecimal> base = new HashMap<>();
+    base.put("Revolut_Current", new BigDecimal("0"));
+    base.put("Revolut_Pocket", new BigDecimal("0"));
+    base.put("Revolut_Savings", new BigDecimal("0"));
 
     List<AccountSummary> accountSummaries = new ArrayList<>();
     for (Map.Entry<String, Map<Date, BigDecimal>> entry : accountSummariesMap.entrySet()) {
@@ -96,17 +118,13 @@ public class TransactionService {
       AccountSummary accountSummary = new AccountSummary(accountName, valueDatePairs);
       accountSummary.sortAccountsByDate();
 
-      BigDecimal previousValue = BigDecimal.ZERO;
+      BigDecimal previousValue = base.get(accountName);
 
-      List<AccountSummary.ValueDatePair> sortedValueDatePairs = accountSummary.getSummary(); // Get the sorted valueDatePairs
+      List<AccountSummary.ValueDatePair> sortedValueDatePairs = accountSummary.getSummary();
 
       for (AccountSummary.ValueDatePair valuePair : sortedValueDatePairs) {
         BigDecimal currentValue = valuePair.getValue();
-
-        if (currentValue.compareTo(BigDecimal.ZERO) == 0) {
-          valuePair.setValue(previousValue);
-        }
-
+        valuePair.setValue(currentValue.add(previousValue));
         previousValue = valuePair.getValue();
       }
 
@@ -119,7 +137,8 @@ public class TransactionService {
 
   public List<TransactionDto> addTransactions(List<TransactionDto> transactionDto) {
     List<Transaction> txToAdd = transactionMapper.toEntity(transactionDto);
-    List<Transaction> txAdded = transactionRepository.saveAllAndFlush(txToAdd);
+    List<Transaction> txAdded = transactionRepository.saveAll(txToAdd);
+    transactionRepository.flush();
     return transactionMapper.toDto(txAdded);
   }
 
@@ -131,6 +150,9 @@ public class TransactionService {
     String[] headers = reader.readLine().split(",");
     while ((line = reader.readLine()) != null) {
       String[] data = line.split(",", -1);
+      if(data.length != headers.length)
+        throw new RuntimeException("lol");
+
       // Create a Map to hold the data of each row
       Map<String, Object> rowData = new HashMap<>();
       for (int i = 0; i < headers.length; i++) {
@@ -138,10 +160,7 @@ public class TransactionService {
       }
 
       TransactionDto transactionDto = transactionMapper.toDto(rowData);
-
-      //technically it is wrong, but i'm doing it anyway
-      if (!transactionDto.getDescription().equals("Plan Cashback"))
-        transactionDtos.add(transactionDto);
+      transactionDtos.add(transactionDto);
     }
     return transactionDtos;
   }

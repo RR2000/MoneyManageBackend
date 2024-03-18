@@ -7,6 +7,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.math.BigDecimal;
 import java.sql.Timestamp;
 import java.util.List;
 
@@ -29,6 +30,11 @@ public class ControllerAPI {
   @GetMapping("/accounts/{accountName}")
   public ResponseEntity<?> getTransactionsByAccountName(@PathVariable String accountName) {
     return new ResponseEntity<>(transactionService.findTransactionsByAccount(accountName), HttpStatus.OK);
+  }
+
+  @GetMapping("/accounts/{accountName}/computeCumulativeAmount/{amountToday}")
+  public ResponseEntity<?> computeCumulativeAmount(@PathVariable String accountName, @PathVariable BigDecimal amountToday) {
+    return new ResponseEntity<>(transactionService.computeCumulativeAmount(accountName, amountToday), HttpStatus.OK);
   }
 
   @GetMapping("/accounts/{accountName}/{timestamp}")
