@@ -1,6 +1,5 @@
 package com.rondinella.moneymanageapi.dtos;
 
-import io.swagger.annotations.ApiModel;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -11,7 +10,6 @@ import java.sql.Date;
 import java.util.Collections;
 import java.util.List;
 
-@ApiModel(description = "DTO for representing the day summary")
 @Getter
 @Setter
 @AllArgsConstructor

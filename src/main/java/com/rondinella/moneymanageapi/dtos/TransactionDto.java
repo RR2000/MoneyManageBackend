@@ -1,8 +1,6 @@
 package com.rondinella.moneymanageapi.dtos;
 
 import com.rondinella.moneymanageapi.enitities.Transaction;
-import io.swagger.annotations.ApiModel;
-import jakarta.persistence.Id;
 import lombok.*;
 
 import java.io.Serializable;
@@ -12,7 +10,6 @@ import java.sql.Timestamp;
 /**
  * DTO for {@link Transaction}
  */
-@ApiModel(description = "DTO for representing a transaction")
 @Getter
 @Setter
 @AllArgsConstructor
@@ -25,4 +22,5 @@ public class TransactionDto implements Serializable {
   BigDecimal amount = null;
   BigDecimal fee = null;
   String currency = null;
+  BigDecimal cumulativeAmount = null;
 }
