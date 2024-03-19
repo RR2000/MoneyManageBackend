@@ -1,6 +1,5 @@
 package com.rondinella.moneymanageapi.services;
 
-import com.rondinella.moneymanageapi.dtos.AccountSummary;
 import com.rondinella.moneymanageapi.dtos.TransactionDto;
 import com.rondinella.moneymanageapi.enitities.Transaction;
 import com.rondinella.moneymanageapi.mappers.TransactionMapper;
@@ -11,9 +10,7 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.StringReader;
 import java.math.BigDecimal;
-import java.sql.Date;
 import java.sql.Timestamp;
-import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -80,62 +77,9 @@ public class TransactionService {
     return sum;
   }
 
-  public List<AccountSummary> historyBetweenDates(Timestamp startTimestamp, Timestamp endTimestamp) {
-    List<Transaction> transactions = transactionRepository.findByCompletedDateBetween(startTimestamp, endTimestamp);
-
-    Map<String, Map<Date, BigDecimal>> accountSummariesMap = new HashMap<>();
-
-    LocalDate currentDate = startTimestamp.toLocalDateTime().toLocalDate();
-    LocalDate endDate = endTimestamp.toLocalDateTime().toLocalDate();
-    while (!currentDate.isAfter(endDate)) {
-      for (String account : findAllAccounts()) {
-        accountSummariesMap.computeIfAbsent(account, k -> new HashMap<>())
-            .put(Date.valueOf(currentDate), BigDecimal.ZERO);
-      }
-      currentDate = currentDate.plusDays(1);
-    }
-
-    for (Transaction transaction : transactions) {
-      String account = transaction.getAccount();
-      LocalDate transactionDate = transaction.getCompletedDate().toLocalDateTime().toLocalDate();
-      Date date = Date.valueOf(transactionDate);
-      BigDecimal amount = transaction.getAmount().add(transaction.getFee());
-
-      Map<Date, BigDecimal> accountSummary = accountSummariesMap.get(account);
-      accountSummary.put(date, accountSummary.get(date).add(amount));
-    }
-
-    Map<String, BigDecimal> base = new HashMap<>();
-    base.put("Revolut_Current", new BigDecimal("0"));
-    base.put("Revolut_Pocket", new BigDecimal("0"));
-    base.put("Revolut_Savings", new BigDecimal("0"));
-
-    List<AccountSummary> accountSummaries = new ArrayList<>();
-    for (Map.Entry<String, Map<Date, BigDecimal>> entry : accountSummariesMap.entrySet()) {
-      String accountName = entry.getKey();
-      Map<Date, BigDecimal> accountData = entry.getValue();
-      List<AccountSummary.ValueDatePair> valueDatePairs = new ArrayList<>();
-      for (Map.Entry<Date, BigDecimal> dataEntry : accountData.entrySet()) {
-        valueDatePairs.add(new AccountSummary.ValueDatePair(dataEntry.getKey(), dataEntry.getValue()));
-      }
-      AccountSummary accountSummary = new AccountSummary(accountName, valueDatePairs);
-      accountSummary.sortAccountsByDate();
-
-      BigDecimal previousValue = base.get(accountName);
-
-      List<AccountSummary.ValueDatePair> sortedValueDatePairs = accountSummary.getSummary();
-
-      for (AccountSummary.ValueDatePair valuePair : sortedValueDatePairs) {
-        BigDecimal currentValue = valuePair.getValue();
-        valuePair.setValue(currentValue.add(previousValue));
-        previousValue = valuePair.getValue();
-      }
-
-      accountSummary.setSummary(sortedValueDatePairs);
-      accountSummaries.add(accountSummary);
-    }
-
-    return accountSummaries;
+  public List<TransactionDto> historyBetweenDates(Timestamp startTimestamp, Timestamp endTimestamp, String account) {
+    List<Transaction> transactions = transactionRepository.findByCompletedDateBetweenAndAccount(startTimestamp, endTimestamp, account);
+    return transactionMapper.toDto(transactions);
   }
 
   public List<TransactionDto> addTransactions(List<TransactionDto> transactionDto) {
@@ -153,7 +97,7 @@ public class TransactionService {
     String[] headers = reader.readLine().split(",");
     while ((line = reader.readLine()) != null) {
       String[] data = line.split(",", -1);
-      if(data.length != headers.length)
+      if (data.length != headers.length)
         throw new RuntimeException("lol");
 
       // Create a Map to hold the data of each row

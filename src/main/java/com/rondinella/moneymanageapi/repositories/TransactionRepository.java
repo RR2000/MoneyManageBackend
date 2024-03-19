@@ -17,5 +17,5 @@ public interface TransactionRepository extends JpaRepository<Transaction, Timest
 
   List<Transaction> findTransactionByAccountAndCompletedDateGreaterThanOrderByCompletedDateDesc(String account, Timestamp day);
 
-  List<Transaction> findByCompletedDateBetween(Timestamp startTimestamp, Timestamp endTimestamp);
+  List<Transaction> findByCompletedDateBetweenAndAccount(Timestamp startTimestamp, Timestamp endTimestamp, String account);
 }
