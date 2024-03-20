@@ -43,11 +43,19 @@ public class ControllerAPI {
     return new ResponseEntity<>(transactionService.amountOnThatDay(accountName, timestamp), HttpStatus.OK);
   }
 
-  @GetMapping("/{fromTimestamp}/{toTimestamp}")
-  public ResponseEntity<?> historyBetweenDates(
+  @GetMapping("graph/{fromTimestamp}/{toTimestamp}")
+  public ResponseEntity<?> historyBetweenDatesGraph(
       @PathVariable @Parameter(example = "2024-03-01 00:00:00.000") Timestamp fromTimestamp,
       @PathVariable @Parameter(example = "2024-03-31 23:59:59.999") Timestamp toTimestamp) {
     return new ResponseEntity<>(transactionService.historyBetweenDates(fromTimestamp, toTimestamp), HttpStatus.OK);
+  }
+
+  @GetMapping("table/{fromTimestamp}/{toTimestamp}")
+  public ResponseEntity<?> historyBetweenDatesTable(
+      @PathVariable @Parameter(example = "2024-03-01 00:00:00.000") Timestamp fromTimestamp,
+      @PathVariable @Parameter(example = "2024-03-31 23:59:59.999") Timestamp toTimestamp,
+      @RequestParam String accountName) {
+    return new ResponseEntity<>(transactionService.historyBetweenDates(fromTimestamp, toTimestamp, accountName), HttpStatus.OK);
   }
 
   @GetMapping("/accounts")
