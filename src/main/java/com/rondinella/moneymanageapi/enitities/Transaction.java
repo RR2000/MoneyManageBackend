@@ -38,6 +38,6 @@ public class Transaction implements Persistable<TransactionId> {
 
   @Override
   public boolean isNew() {
-    return true;
+    return false;
   }
 }

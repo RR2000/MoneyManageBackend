@@ -1,5 +1,7 @@
 package com.rondinella.moneymanageapi.services;
 
+import com.rondinella.moneymanageapi.common.DateUtils;
+import com.rondinella.moneymanageapi.dtos.GraphPointsDto;
 import com.rondinella.moneymanageapi.dtos.TransactionDto;
 import com.rondinella.moneymanageapi.enitities.Transaction;
 import com.rondinella.moneymanageapi.mappers.TransactionMapper;
@@ -76,10 +78,60 @@ public class TransactionService {
 
     return sum;
   }
-
+  /*
   public List<TransactionDto> historyBetweenDates(Timestamp startTimestamp, Timestamp endTimestamp, String account) {
     List<Transaction> transactions = transactionRepository.findByCompletedDateBetweenAndAccount(startTimestamp, endTimestamp, account);
     return transactionMapper.toDto(transactions);
+  }*/
+
+  private BigDecimal fillGapsRecursive(int index, List<String> daysList, Map<String, BigDecimal> points, BigDecimal lastDayValue) {
+    if (index < daysList.size()) {
+      String today = daysList.get(index);
+      BigDecimal value = points.get(today);
+
+      if (value == null) {
+        value = fillGapsRecursive(index + 1, daysList, points, lastDayValue);
+      }
+
+      fillGapsRecursive(index + 1, daysList, points, lastDayValue);
+      points.put(today, value);
+      return value;
+    } else {
+      return lastDayValue;
+    }
+  }
+
+  private void fillGaps(List<String> daysList, Map<String, BigDecimal> points) {
+    BigDecimal lastDayValue = null;
+    for(int i = daysList.size() - 1; i >= 0; i--){
+      String lastDay = daysList.get(i);
+      lastDayValue = points.get(lastDay);
+      if(lastDayValue != null)
+        break;
+    }
+
+    fillGapsRecursive(0, daysList, points, lastDayValue);
+  }
+
+  public GraphPointsDto historyBetweenDates(Timestamp startTimestamp, Timestamp endTimestamp) {
+    GraphPointsDto result = new GraphPointsDto();
+    List<String> daysList = DateUtils.getAllDaysBetweenTimestamps(startTimestamp, endTimestamp);
+    List<String> accounts = transactionRepository.findDistinctAccounts();
+
+    result.setXLabels(daysList);
+    for (String account : accounts) {
+      Map<String, BigDecimal> points = new HashMap<>();
+      List<Transaction> transactions = transactionRepository.findByCompletedDateBetweenAndAccount(startTimestamp, endTimestamp, account);
+      for (Transaction transaction : transactions) {
+        String simpleDate = DateUtils.convertTimestampToString(transaction.getCompletedDate());
+        points.put(simpleDate, transaction.getCumulativeAmount());
+      }
+      result.getLineNames().add(account);
+      fillGaps(daysList, points);
+      result.getData().put(account, points);
+    }
+
+    return result;
   }
 
   public List<TransactionDto> addTransactions(List<TransactionDto> transactionDto) {

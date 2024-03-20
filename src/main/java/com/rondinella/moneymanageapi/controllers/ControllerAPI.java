@@ -3,6 +3,7 @@ package com.rondinella.moneymanageapi.controllers;
 import com.rondinella.moneymanageapi.dtos.TransactionDto;
 import com.rondinella.moneymanageapi.services.TransactionService;
 import com.rondinella.moneymanageapi.services.TransactionService.BankName;
+import io.swagger.v3.oas.annotations.Parameter;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -44,10 +45,9 @@ public class ControllerAPI {
 
   @GetMapping("/{fromTimestamp}/{toTimestamp}")
   public ResponseEntity<?> historyBetweenDates(
-      @PathVariable Timestamp fromTimestamp,
-      @PathVariable Timestamp toTimestamp,
-      @RequestParam("accountName") String account) {
-    return new ResponseEntity<>(transactionService.historyBetweenDates(fromTimestamp, toTimestamp, account), HttpStatus.OK);
+      @PathVariable @Parameter(example = "2024-03-01 00:00:00.000") Timestamp fromTimestamp,
+      @PathVariable @Parameter(example = "2024-03-31 23:59:59.999") Timestamp toTimestamp) {
+    return new ResponseEntity<>(transactionService.historyBetweenDates(fromTimestamp, toTimestamp), HttpStatus.OK);
   }
 
   @GetMapping("/accounts")
