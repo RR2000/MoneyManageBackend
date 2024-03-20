@@ -11,11 +11,13 @@ public interface TransactionRepository extends JpaRepository<Transaction, Timest
   @Query("SELECT DISTINCT t.account FROM Transaction t")
   List<String> findDistinctAccounts();
 
-  List<Transaction> findTransactionByAccountOrderByCompletedDate(String account);
+  List<Transaction> findTransactionByAccountOrderByDatetime(String account);
 
-  List<Transaction> findTransactionByAccountOrderByCompletedDateDesc(String account);
+  List<Transaction> findTransactionByAccountOrderByDatetimeDesc(String account);
 
-  List<Transaction> findTransactionByAccountAndCompletedDateGreaterThanOrderByCompletedDateDesc(String account, Timestamp day);
+  List<Transaction> findTransactionByAccountAndDatetimeGreaterThanOrderByDatetimeDesc(String account, Timestamp day);
 
-  List<Transaction> findByCompletedDateBetweenAndAccount(Timestamp startTimestamp, Timestamp endTimestamp, String account);
+  List<Transaction> findByDatetimeBetweenAndAccount(Timestamp startTimestamp, Timestamp endTimestamp, String account);
+
+  List<Transaction> findByDatetimeBetweenAndAccountOrderByDatetime(Timestamp startTimestamp, Timestamp endTimestamp, String account);
 }

@@ -38,7 +38,7 @@ public class TransactionService {
   }
 
   public List<TransactionDto> findTransactionsByAccount(String accountName) {
-    return transactionMapper.toDto(transactionRepository.findTransactionByAccountOrderByCompletedDate(accountName));
+    return transactionMapper.toDto(transactionRepository.findTransactionByAccountOrderByDatetime(accountName));
   }
 
   public List<String> findAllAccounts() {
@@ -46,7 +46,7 @@ public class TransactionService {
   }
 
   public boolean computeCumulativeAmount(String account, BigDecimal todayMoney) {
-    List<Transaction> transactions = transactionRepository.findTransactionByAccountOrderByCompletedDateDesc(account);
+    List<Transaction> transactions = transactionRepository.findTransactionByAccountOrderByDatetimeDesc(account);
 
     BigDecimal cumulative = todayMoney; // Initialize with today's money
     transactions.get(0).setCumulativeAmount(cumulative);
@@ -68,7 +68,7 @@ public class TransactionService {
     base.put("Revolut_Pocket", new BigDecimal("0"));
     base.put("Revolut_Savings", new BigDecimal("0"));
 
-    List<Transaction> transactions = transactionRepository.findTransactionByAccountAndCompletedDateGreaterThanOrderByCompletedDateDesc(accountName, thatDay);
+    List<Transaction> transactions = transactionRepository.findTransactionByAccountAndDatetimeGreaterThanOrderByDatetimeDesc(accountName, thatDay);
 
     BigDecimal sum = base.get(accountName);
 
@@ -78,11 +78,12 @@ public class TransactionService {
 
     return sum;
   }
-  /*
+
+
   public List<TransactionDto> historyBetweenDates(Timestamp startTimestamp, Timestamp endTimestamp, String account) {
-    List<Transaction> transactions = transactionRepository.findByCompletedDateBetweenAndAccount(startTimestamp, endTimestamp, account);
+    List<Transaction> transactions = transactionRepository.findByDatetimeBetweenAndAccount(startTimestamp, endTimestamp, account);
     return transactionMapper.toDto(transactions);
-  }*/
+  }
 
   private BigDecimal fillGapsRecursive(int index, List<String> daysList, Map<String, BigDecimal> points, BigDecimal lastDayValue) {
     if (index < daysList.size()) {
@@ -121,9 +122,9 @@ public class TransactionService {
     result.setXLabels(daysList);
     for (String account : accounts) {
       Map<String, BigDecimal> points = new HashMap<>();
-      List<Transaction> transactions = transactionRepository.findByCompletedDateBetweenAndAccount(startTimestamp, endTimestamp, account);
+      List<Transaction> transactions = transactionRepository.findByDatetimeBetweenAndAccountOrderByDatetime(startTimestamp, endTimestamp, account);
       for (Transaction transaction : transactions) {
-        String simpleDate = DateUtils.convertTimestampToString(transaction.getCompletedDate());
+        String simpleDate = DateUtils.convertTimestampToString(transaction.getDatetime());
         points.put(simpleDate, transaction.getCumulativeAmount());
       }
       result.getLineNames().add(account);
@@ -186,3 +187,4 @@ public class TransactionService {
   }
 
 }
+

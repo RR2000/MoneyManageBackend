@@ -14,7 +14,6 @@ import java.sql.Timestamp;
 @NoArgsConstructor
 public class TransactionId implements Serializable {
   String account;
-  Timestamp startedDate;
-  Timestamp completedDate;
+  Timestamp datetime;
   String description;
 }

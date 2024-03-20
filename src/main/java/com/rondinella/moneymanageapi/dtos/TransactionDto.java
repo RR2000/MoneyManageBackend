@@ -16,8 +16,7 @@ import java.sql.Timestamp;
 @NoArgsConstructor
 public class TransactionDto implements Serializable {
   String account = null;
-  Timestamp startedDate = null;
-  Timestamp completedDate = null;
+  Timestamp datetime = null;
   String description = null;
   BigDecimal amount = null;
   BigDecimal fee = null;

@@ -21,9 +21,7 @@ public class Transaction implements Persistable<TransactionId> {
   @Id
   String account;
   @Id
-  Timestamp startedDate;
-  @Id
-  Timestamp completedDate;
+  Timestamp datetime;
   @Id
   String description;
   BigDecimal amount;
@@ -33,7 +31,7 @@ public class Transaction implements Persistable<TransactionId> {
 
   @Override
   public TransactionId getId() {
-    return new TransactionId(account, startedDate, completedDate, description);
+    return new TransactionId(account, datetime, description);
   }
 
   @Override
