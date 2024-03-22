@@ -13,6 +13,6 @@ public class OpenApiConfig {
 
   @Bean
   public OpenAPI baseOpenApi() {
-    return new OpenAPI().info(new Info().title("lol").version("lol").description("lol"));
+    return new OpenAPI().info(new Info().title("MoneyManageBackend").version("0.1").description("MoneyManageBackend"));
   }
 }
