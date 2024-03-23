@@ -1,11 +1,11 @@
 package com.rondinella.moneymanageapi.services;
 
 import com.rondinella.moneymanageapi.common.DateUtils;
+import com.rondinella.moneymanageapi.dtos.BankTransactionDto;
 import com.rondinella.moneymanageapi.dtos.GraphPointsDto;
-import com.rondinella.moneymanageapi.dtos.TransactionDto;
-import com.rondinella.moneymanageapi.enitities.Transaction;
-import com.rondinella.moneymanageapi.mappers.TransactionMapper;
-import com.rondinella.moneymanageapi.repositories.TransactionRepository;
+import com.rondinella.moneymanageapi.enitities.BankTransaction;
+import com.rondinella.moneymanageapi.mappers.BankTransactionMapper;
+import com.rondinella.moneymanageapi.repositories.BankTransactionRepository;
 import org.springframework.stereotype.Service;
 
 import java.io.BufferedReader;
@@ -19,45 +19,45 @@ import java.util.List;
 import java.util.Map;
 
 @Service
-public class TransactionService {
+public class BankTransactionService {
   public enum BankName {
     Revolut,
     Sanpaolo
   }
 
   final
-  TransactionRepository transactionRepository;
-  TransactionMapper transactionMapper = TransactionMapper.INSTANCE;
+  BankTransactionRepository bankTransactionRepository;
+  BankTransactionMapper bankTransactionMapper = BankTransactionMapper.INSTANCE;
 
-  public TransactionService(TransactionRepository transactionRepository) {
-    this.transactionRepository = transactionRepository;
+  public BankTransactionService(BankTransactionRepository bankTransactionRepository) {
+    this.bankTransactionRepository = bankTransactionRepository;
   }
 
-  public List<TransactionDto> findAllTransactions() {
-    return transactionMapper.toDto(transactionRepository.findAll());
+  public List<BankTransactionDto> findAllTransactions() {
+    return bankTransactionMapper.toDto(bankTransactionRepository.findAll());
   }
 
-  public List<TransactionDto> findTransactionsByAccount(String accountName) {
-    return transactionMapper.toDto(transactionRepository.findTransactionByAccountOrderByDatetime(accountName));
+  public List<BankTransactionDto> findTransactionsByAccount(String accountName) {
+    return bankTransactionMapper.toDto(bankTransactionRepository.findTransactionByAccountOrderByDatetime(accountName));
   }
 
   public List<String> findAllAccounts() {
-    return transactionRepository.findDistinctAccounts();
+    return bankTransactionRepository.findDistinctAccounts();
   }
 
   public boolean computeCumulativeAmount(String account, BigDecimal todayMoney) {
-    List<Transaction> transactions = transactionRepository.findTransactionByAccountOrderByDatetimeDesc(account);
+    List<BankTransaction> bankTransactions = bankTransactionRepository.findTransactionByAccountOrderByDatetimeDesc(account);
 
     BigDecimal cumulative = todayMoney; // Initialize with today's money
-    transactions.get(0).setCumulativeAmount(cumulative);
-    for (int i = 1; i < transactions.size(); i++) {
-      Transaction previous = transactions.get(i - 1);
-      Transaction transaction = transactions.get(i);
+    bankTransactions.get(0).setCumulativeAmount(cumulative);
+    for (int i = 1; i < bankTransactions.size(); i++) {
+      BankTransaction previous = bankTransactions.get(i - 1);
+      BankTransaction bankTransaction = bankTransactions.get(i);
       cumulative = cumulative.subtract(previous.getAmount()); // Add current transaction's amount
-      transaction.setCumulativeAmount(cumulative); // Set cumulative amount for the transaction
+      bankTransaction.setCumulativeAmount(cumulative); // Set cumulative amount for the transaction
     }
 
-    transactionRepository.saveAllAndFlush(transactions);
+    bankTransactionRepository.saveAllAndFlush(bankTransactions);
 
     return true;
   }
@@ -68,21 +68,21 @@ public class TransactionService {
     base.put("Revolut_Pocket", new BigDecimal("0"));
     base.put("Revolut_Savings", new BigDecimal("0"));
 
-    List<Transaction> transactions = transactionRepository.findTransactionByAccountAndDatetimeGreaterThanOrderByDatetimeDesc(accountName, thatDay);
+    List<BankTransaction> bankTransactions = bankTransactionRepository.findTransactionByAccountAndDatetimeGreaterThanOrderByDatetimeDesc(accountName, thatDay);
 
     BigDecimal sum = base.get(accountName);
 
-    for (Transaction transaction : transactions) {
-      sum = sum.subtract(transaction.getAmount()).subtract(transaction.getFee());
+    for (BankTransaction bankTransaction : bankTransactions) {
+      sum = sum.subtract(bankTransaction.getAmount()).subtract(bankTransaction.getFee());
     }
 
     return sum;
   }
 
 
-  public List<TransactionDto> historyBetweenDates(Timestamp startTimestamp, Timestamp endTimestamp, String account) {
-    List<Transaction> transactions = transactionRepository.findByDatetimeBetweenAndAccount(startTimestamp, endTimestamp, account);
-    return transactionMapper.toDto(transactions);
+  public List<BankTransactionDto> historyBetweenDates(Timestamp startTimestamp, Timestamp endTimestamp, String account) {
+    List<BankTransaction> bankTransactions = bankTransactionRepository.findByDatetimeBetweenAndAccount(startTimestamp, endTimestamp, account);
+    return bankTransactionMapper.toDto(bankTransactions);
   }
 
   private BigDecimal fillGapsRecursive(int index, List<String> daysList, Map<String, BigDecimal> points, BigDecimal lastDayValue) {
@@ -117,15 +117,15 @@ public class TransactionService {
   public GraphPointsDto historyBetweenDates(Timestamp startTimestamp, Timestamp endTimestamp) {
     GraphPointsDto result = new GraphPointsDto();
     List<String> daysList = DateUtils.getAllDaysBetweenTimestamps(startTimestamp, endTimestamp);
-    List<String> accounts = transactionRepository.findDistinctAccounts();
+    List<String> accounts = bankTransactionRepository.findDistinctAccounts();
 
     result.setXLabels(daysList);
     for (String account : accounts) {
       Map<String, BigDecimal> points = new HashMap<>();
-      List<Transaction> transactions = transactionRepository.findByDatetimeBetweenAndAccountOrderByDatetime(startTimestamp, endTimestamp, account);
-      for (Transaction transaction : transactions) {
-        String simpleDate = DateUtils.convertTimestampToString(transaction.getDatetime());
-        points.put(simpleDate, transaction.getCumulativeAmount());
+      List<BankTransaction> bankTransactions = bankTransactionRepository.findByDatetimeBetweenAndAccountOrderByDatetime(startTimestamp, endTimestamp, account);
+      for (BankTransaction bankTransaction : bankTransactions) {
+        String simpleDate = DateUtils.convertTimestampToString(bankTransaction.getDatetime());
+        points.put(simpleDate, bankTransaction.getCumulativeAmount());
       }
       result.getLineNames().add(account);
       fillGaps(daysList, points);
@@ -135,16 +135,16 @@ public class TransactionService {
     return result;
   }
 
-  public List<TransactionDto> addTransactions(List<TransactionDto> transactionDto) {
-    List<Transaction> txToAdd = transactionMapper.toEntity(transactionDto);
-    List<Transaction> txAdded = transactionRepository.saveAll(txToAdd);
-    transactionRepository.flush();
-    return transactionMapper.toDto(txAdded);
+  public List<BankTransactionDto> addTransactions(List<BankTransactionDto> bankTransactionDto) {
+    List<BankTransaction> txToAdd = bankTransactionMapper.toEntity(bankTransactionDto);
+    List<BankTransaction> txAdded = bankTransactionRepository.saveAll(txToAdd);
+    bankTransactionRepository.flush();
+    return bankTransactionMapper.toDto(txAdded);
   }
 
-  private List<TransactionDto> revolutCsv(String csvData) throws IOException {
+  private List<BankTransactionDto> revolutCsv(String csvData) throws IOException {
     BufferedReader reader = new BufferedReader(new StringReader(csvData));
-    List<TransactionDto> transactionDtos = new ArrayList<>();
+    List<BankTransactionDto> bankTransactionDtos = new ArrayList<>();
     String line;
     // Read the header line to get field names
     String[] headers = reader.readLine().split(",");
@@ -159,25 +159,25 @@ public class TransactionService {
         rowData.put(headers[i], data[i]);
       }
 
-      TransactionDto transactionDto = transactionMapper.toDto(rowData);
-      transactionDtos.add(transactionDto);
+      BankTransactionDto bankTransactionDto = bankTransactionMapper.toDto(rowData);
+      bankTransactionDtos.add(bankTransactionDto);
     }
-    return transactionDtos;
+    return bankTransactionDtos;
   }
 
-  public List<TransactionDto> addTransactionsFromCsv(String csvData, BankName bankName) {
+  public List<BankTransactionDto> addTransactionsFromCsv(String csvData, BankName bankName) {
     if (csvData == null || csvData.isEmpty()) {
       throw new RuntimeException("CSV data is empty");
     }
     try {
-      List<TransactionDto> transactionDtos;
+      List<BankTransactionDto> bankTransactionDtos;
       switch (bankName) {
-        case Revolut -> transactionDtos = revolutCsv(csvData);
+        case Revolut -> bankTransactionDtos = revolutCsv(csvData);
         case Sanpaolo -> throw new RuntimeException("Sanpaolo not implemented yet");
         default -> throw new RuntimeException("Impossible to be here");
       }
 
-      return addTransactions(transactionDtos);
+      return addTransactions(bankTransactionDtos);
     } catch (IOException e) {
       throw new RuntimeException("Failed to read CSV data", e);
     } catch (Exception e) {

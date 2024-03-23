@@ -1,10 +1,9 @@
 package com.rondinella.moneymanageapi.enitities;
 
-import com.rondinella.moneymanageapi.enitities.ids.TransactionId;
+import com.rondinella.moneymanageapi.enitities.ids.BankTransactionId;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.IdClass;
-import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.Setter;
 import org.springframework.data.domain.Persistable;
@@ -15,9 +14,8 @@ import java.sql.Timestamp;
 @Getter
 @Setter
 @Entity
-@Table(name = "transaction")
-@IdClass(TransactionId.class)
-public class Transaction implements Persistable<TransactionId> {
+@IdClass(BankTransactionId.class)
+public class BankTransaction implements Persistable<BankTransactionId> {
   @Id
   String account;
   @Id
@@ -30,8 +28,8 @@ public class Transaction implements Persistable<TransactionId> {
   BigDecimal cumulativeAmount;
 
   @Override
-  public TransactionId getId() {
-    return new TransactionId(account, datetime, description);
+  public BankTransactionId getId() {
+    return new BankTransactionId(account, datetime, description);
   }
 
   @Override

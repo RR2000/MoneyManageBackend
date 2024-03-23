@@ -12,7 +12,7 @@ import java.sql.Timestamp;
 @Setter
 @AllArgsConstructor
 @NoArgsConstructor
-public class TransactionId implements Serializable {
+public class BankTransactionId implements Serializable {
   String account;
   Timestamp datetime;
   String description;

@@ -1,7 +1,7 @@
 package com.rondinella.moneymanageapi.mappers;
 
-import com.rondinella.moneymanageapi.dtos.TransactionDto;
-import com.rondinella.moneymanageapi.enitities.Transaction;
+import com.rondinella.moneymanageapi.dtos.BankTransactionDto;
+import com.rondinella.moneymanageapi.enitities.BankTransaction;
 import org.mapstruct.Mapper;
 
 import java.math.BigDecimal;
@@ -10,22 +10,22 @@ import java.util.List;
 import java.util.Map;
 
 @Mapper
-public interface TransactionMapper {
-  TransactionMapper INSTANCE = new TransactionMapperImpl(); // Singleton instance
+public interface BankTransactionMapper {
+  BankTransactionMapper INSTANCE = new BankTransactionMapperImpl(); // Singleton instance
 
-  TransactionDto toDto(Transaction entity);
+  BankTransactionDto toDto(BankTransaction entity);
 
-  Transaction toEntity(TransactionDto entity);
+  BankTransaction toEntity(BankTransactionDto entity);
 
-  List<TransactionDto> toDto(List<Transaction> entity);
+  List<BankTransactionDto> toDto(List<BankTransaction> entity);
 
-  List<Transaction> toEntity(List<TransactionDto> entity);
+  List<BankTransaction> toEntity(List<BankTransactionDto> entity);
 
-  default TransactionDto toDto(Map<String, Object> rowData) {
+  default BankTransactionDto toDto(Map<String, Object> rowData) {
     if (rowData == null) {
       return null;
     }
-    TransactionDto dto = new TransactionDto();
+    BankTransactionDto dto = new BankTransactionDto();
     dto.setAccount("Revolut_" + rowData.get("Product"));
     dto.setDatetime(Timestamp.valueOf((String) rowData.get("Started Date")));
     dto.setDescription((String) rowData.get("Description"));

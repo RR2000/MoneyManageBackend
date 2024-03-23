@@ -1,8 +1,8 @@
 package com.rondinella.moneymanageapi.controllers;
 
-import com.rondinella.moneymanageapi.dtos.TransactionDto;
-import com.rondinella.moneymanageapi.services.TransactionService;
-import com.rondinella.moneymanageapi.services.TransactionService.BankName;
+import com.rondinella.moneymanageapi.dtos.BankTransactionDto;
+import com.rondinella.moneymanageapi.services.BankTransactionService;
+import com.rondinella.moneymanageapi.services.BankTransactionService.BankName;
 import io.swagger.v3.oas.annotations.Parameter;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -14,40 +14,40 @@ import java.util.List;
 
 @RestController
 @CrossOrigin(origins = "http://localhost:4200") // Allow requests from Angular app
-@RequestMapping("/api/transactions")
-public class ControllerAPI {
+@RequestMapping("/api/bankTransactions")
+public class BankTransactionsController {
 
-  private final TransactionService transactionService;
+  private final BankTransactionService bankTransactionService;
 
-  public ControllerAPI(TransactionService transactionService) {
-    this.transactionService = transactionService;
+  public BankTransactionsController(BankTransactionService bankTransactionService) {
+    this.bankTransactionService = bankTransactionService;
   }
 
   @GetMapping
   public ResponseEntity<?> getAllTransactions() {
-    return new ResponseEntity<>(transactionService.findAllTransactions(), HttpStatus.CREATED);
+    return new ResponseEntity<>(bankTransactionService.findAllTransactions(), HttpStatus.CREATED);
   }
 
   @GetMapping("/accounts/{accountName}")
   public ResponseEntity<?> getTransactionsByAccountName(@PathVariable String accountName) {
-    return new ResponseEntity<>(transactionService.findTransactionsByAccount(accountName), HttpStatus.OK);
+    return new ResponseEntity<>(bankTransactionService.findTransactionsByAccount(accountName), HttpStatus.OK);
   }
 
   @GetMapping("/accounts/{accountName}/computeCumulativeAmount/{amountToday}")
   public ResponseEntity<?> computeCumulativeAmount(@PathVariable String accountName, @PathVariable BigDecimal amountToday) {
-    return new ResponseEntity<>(transactionService.computeCumulativeAmount(accountName, amountToday), HttpStatus.OK);
+    return new ResponseEntity<>(bankTransactionService.computeCumulativeAmount(accountName, amountToday), HttpStatus.OK);
   }
 
   @GetMapping("/accounts/{accountName}/{timestamp}")
   public ResponseEntity<?> getTransactionsByAccountName(@PathVariable String accountName, @PathVariable Timestamp timestamp) {
-    return new ResponseEntity<>(transactionService.amountOnThatDay(accountName, timestamp), HttpStatus.OK);
+    return new ResponseEntity<>(bankTransactionService.amountOnThatDay(accountName, timestamp), HttpStatus.OK);
   }
 
   @GetMapping("graph/{fromTimestamp}/{toTimestamp}")
   public ResponseEntity<?> historyBetweenDatesGraph(
       @PathVariable @Parameter(example = "2024-03-01 00:00:00.000") Timestamp fromTimestamp,
       @PathVariable @Parameter(example = "2024-03-31 23:59:59.999") Timestamp toTimestamp) {
-    return new ResponseEntity<>(transactionService.historyBetweenDates(fromTimestamp, toTimestamp), HttpStatus.OK);
+    return new ResponseEntity<>(bankTransactionService.historyBetweenDates(fromTimestamp, toTimestamp), HttpStatus.OK);
   }
 
   @GetMapping("table/{fromTimestamp}/{toTimestamp}")
@@ -55,21 +55,21 @@ public class ControllerAPI {
       @PathVariable @Parameter(example = "2024-03-01 00:00:00.000") Timestamp fromTimestamp,
       @PathVariable @Parameter(example = "2024-03-31 23:59:59.999") Timestamp toTimestamp,
       @RequestParam String accountName) {
-    return new ResponseEntity<>(transactionService.historyBetweenDates(fromTimestamp, toTimestamp, accountName), HttpStatus.OK);
+    return new ResponseEntity<>(bankTransactionService.historyBetweenDates(fromTimestamp, toTimestamp, accountName), HttpStatus.OK);
   }
 
   @GetMapping("/accounts")
   public ResponseEntity<?> getAllAccounts() {
-    return ResponseEntity.status(HttpStatus.OK).body(transactionService.findAllAccounts());
+    return ResponseEntity.status(HttpStatus.OK).body(bankTransactionService.findAllAccounts());
   }
 
   @PostMapping
-  public ResponseEntity<?> createTransaction(@RequestBody List<TransactionDto> transactionsDto) {
-    return ResponseEntity.status(HttpStatus.CREATED).body(transactionService.addTransactions(transactionsDto));
+  public ResponseEntity<?> createTransaction(@RequestBody List<BankTransactionDto> transactionsDto) {
+    return ResponseEntity.status(HttpStatus.CREATED).body(bankTransactionService.addTransactions(transactionsDto));
   }
 
   @PostMapping(value = "/upload", consumes = "text/csv")
   public ResponseEntity<?> uploadTransactions(@RequestBody String csvData) {
-    return ResponseEntity.status(HttpStatus.CREATED).body(transactionService.addTransactionsFromCsv(csvData, BankName.Revolut));
+    return ResponseEntity.status(HttpStatus.CREATED).body(bankTransactionService.addTransactionsFromCsv(csvData, BankName.Revolut));
   }
 }
