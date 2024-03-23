@@ -10,9 +10,10 @@ services:
     volumes:
       - db:/var/lib/mysql  # MySQL data directory volume
 
-# You can also use MariaDB instead of MySQL if you prefer
-# To use MariaDB, replace the 'image' line with the following:
-#   image: mariadb:latest
+  selenium:
+    image: seleniarm/standalone-chromium:latest
+    ports:
+      - '4444:4444'
 
 volumes:
   db:
