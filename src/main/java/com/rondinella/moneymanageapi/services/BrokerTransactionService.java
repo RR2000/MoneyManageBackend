@@ -5,12 +5,12 @@ import com.rondinella.moneymanageapi.dtos.BrokerTransactionDto;
 import com.rondinella.moneymanageapi.enitities.BrokerTransaction;
 import com.rondinella.moneymanageapi.mappers.BrokerTransactionMapper;
 import com.rondinella.moneymanageapi.repositories.BrokerTransactionRepository;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import yahoofinance.Stock;
 import yahoofinance.YahooFinance;
 
 import java.io.IOException;
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 
@@ -20,12 +20,33 @@ public class BrokerTransactionService {
     Degiro,
     Sanpaolo
   }
+
   final
   BrokerTransactionRepository brokerTransactionRepository;
   BrokerTransactionMapper brokerTransactionMapper = BrokerTransactionMapper.INSTANCE;
 
   public BrokerTransactionService(BrokerTransactionRepository brokerTransactionRepository) {
     this.brokerTransactionRepository = brokerTransactionRepository;
+  }
+
+  public List<String> findAllIsin() {
+    return brokerTransactionRepository.findDistinctIsin();
+  }
+
+  public BigDecimal worthRightNow() {
+    List<String> isinList = findAllIsin();
+    BigDecimal worth = BigDecimal.ZERO;
+    Stock usdEur = luckySearchStock("USD/EUR");
+    for (String isin : isinList) {
+      Stock stock = luckySearchStock(isin);
+      BigDecimal isinQuantity = brokerTransactionRepository.totalQuantityByIsin(isin);
+      BigDecimal nowValue = stock.getQuote().getPreviousClose();
+      if (stock.getCurrency().equals("USD"))
+        nowValue = nowValue.multiply(usdEur.getQuote().getPreviousClose());
+      worth = worth.add(nowValue.multiply(isinQuantity));
+    }
+
+    return worth;
   }
 
   public String luckySearchTicker(String query) {

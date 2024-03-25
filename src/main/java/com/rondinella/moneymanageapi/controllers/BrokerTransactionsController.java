@@ -1,15 +1,13 @@
 package com.rondinella.moneymanageapi.controllers;
 
-import com.rondinella.moneymanageapi.services.BankTransactionService;
 import com.rondinella.moneymanageapi.services.BrokerTransactionService;
-import org.springframework.beans.factory.annotation.Autowired;
+import lombok.SneakyThrows;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import yahoofinance.Stock;
 import yahoofinance.YahooFinance;
 
-import java.io.IOException;
 import java.math.BigDecimal;
 
 @RestController
@@ -23,21 +21,20 @@ public class BrokerTransactionsController {
     this.brokerTransactionService = brokerTransactionService;
   }
 
+  @SneakyThrows
   @GetMapping("/luckySearch/{query}")
-  public Stock getTransactionsByAccountName(@PathVariable String query) throws IOException {
-    String searchResult =  YahooFinance.luckySearchTicker(query);
-    Stock stock = YahooFinance.get(searchResult);
+  public Stock luckySearch(@PathVariable String query) {
+    String searchResult = YahooFinance.luckySearchTicker(query);
+    return YahooFinance.get(searchResult);
+  }
 
-    BigDecimal price = stock.getQuote().getPrice();
-    BigDecimal change = stock.getQuote().getChangeInPercent();
-    BigDecimal peg = stock.getStats().getPeg();
-    BigDecimal dividend = stock.getDividend().getAnnualYieldPercent();
-
-    return stock;
+  @GetMapping("/worth")
+  public BigDecimal worth() {
+    return brokerTransactionService.worthRightNow();
   }
 
   @PostMapping(value = "/upload", consumes = "text/csv")
-  public ResponseEntity<?> uploadTransactions(@RequestBody String csvData) {
+  public ResponseEntity<?> upload(@RequestBody String csvData) {
     return ResponseEntity.status(HttpStatus.CREATED).body(brokerTransactionService.addTransactionsFromCsv(csvData, BrokerTransactionService.BrokerName.Degiro));
   }
 }
