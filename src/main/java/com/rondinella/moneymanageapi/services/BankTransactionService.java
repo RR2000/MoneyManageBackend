@@ -104,10 +104,10 @@ public class BankTransactionService {
 
   private void fillGaps(List<String> daysList, Map<String, BigDecimal> points) {
     BigDecimal lastDayValue = null;
-    for(int i = daysList.size() - 1; i >= 0; i--){
+    for (int i = daysList.size() - 1; i >= 0; i--) {
       String lastDay = daysList.get(i);
       lastDayValue = points.get(lastDay);
-      if(lastDayValue != null)
+      if (lastDayValue != null)
         break;
     }
 
@@ -159,7 +159,7 @@ public class BankTransactionService {
         rowData.put(headers[i], data[i]);
       }
 
-      BankTransactionDto bankTransactionDto = bankTransactionMapper.toDto(rowData);
+      BankTransactionDto bankTransactionDto = bankTransactionMapper.toDtoFromRevolut(rowData);
       bankTransactionDtos.add(bankTransactionDto);
     }
     return bankTransactionDtos;

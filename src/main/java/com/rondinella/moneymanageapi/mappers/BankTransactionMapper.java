@@ -21,7 +21,7 @@ public interface BankTransactionMapper {
 
   List<BankTransaction> toEntity(List<BankTransactionDto> entity);
 
-  default BankTransactionDto toDto(Map<String, Object> rowData) {
+  default BankTransactionDto toDtoFromRevolut(Map<String, Object> rowData) {
     if (rowData == null) {
       return null;
     }
