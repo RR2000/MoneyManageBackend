@@ -1,14 +1,14 @@
 version: '3.8'
 services:
   db:
-    image: mysql:latest  # Use the MySQL image
-    ports:
-      - '3306:3306'  # MySQL default port
+    image: mysql:latest
     environment:
-      MYSQL_DATABASE: MoneyManageDB  # Name of the database to be created
+      MYSQL_DATABASE: MoneyManageDB
       MYSQL_ROOT_PASSWORD: change-me
     volumes:
-      - db:/var/lib/mysql  # MySQL data directory volume
+      - db:/var/lib/mysql
+    ports:
+      - '3306:3306'
 
   selenium:
     image: seleniarm/standalone-chromium:latest
@@ -18,3 +18,6 @@ services:
 volumes:
   db:
     driver: local
+
+networks:   # Define networks section
+  my-network:   # Specify the network name
