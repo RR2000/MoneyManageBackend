@@ -3,6 +3,7 @@ package com.rondinella.moneymanageapi.services;
 import com.rondinella.moneymanageapi.common.CsvUtils;
 import com.rondinella.moneymanageapi.common.DateUtils;
 import com.rondinella.moneymanageapi.dtos.BrokerTransactionDto;
+import com.rondinella.moneymanageapi.dtos.GraphPointsDto;
 import com.rondinella.moneymanageapi.enitities.BrokerTransaction;
 import com.rondinella.moneymanageapi.mappers.BrokerTransactionMapper;
 import com.rondinella.moneymanageapi.repositories.BrokerTransactionRepository;
@@ -10,12 +11,12 @@ import lombok.SneakyThrows;
 import org.springframework.stereotype.Service;
 import yahoofinance.Stock;
 import yahoofinance.YahooFinance;
+import yahoofinance.histquotes.Interval;
 
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.sql.Timestamp;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 @Service
 public class BrokerTransactionService {
@@ -34,6 +35,56 @@ public class BrokerTransactionService {
 
   public List<String> findAllIsin() {
     return brokerTransactionRepository.findDistinctIsin();
+  }
+
+  @SneakyThrows
+  public Object worthGraph(Timestamp fromTimestamp, Timestamp toTimestamp) {
+    Calendar from = DateUtils.toCalendar(fromTimestamp);
+    Calendar to = DateUtils.toCalendar(toTimestamp);
+    Interval interval = Interval.WEEKLY;
+    List<String> isinList = findAllIsin();
+
+    LinkedHashSet<String> dates = new LinkedHashSet<>();
+    Map<String, Map<String, BigDecimal>> body = new HashMap<>();
+    for (String isin : isinList) {
+      String stockTicker = luckySearchTicker(isin);
+      Stock stock = YahooFinance.get(stockTicker, from, to, interval);
+      Map<String, BigDecimal> quotes = new HashMap<>();
+      stock.getHistory().forEach((quote) -> {
+        String dateString = DateUtils.calendarToString(quote.getDate());
+        Timestamp dateTimestamp = DateUtils.stringToTimestamp(dateString);
+        BigDecimal totalQuantity = brokerTransactionRepository.totalQuantityByIsinGreaterThan(isin, dateTimestamp);
+        BigDecimal value = quote.getClose().multiply(totalQuantity);
+        quotes.put(dateString, value);
+        dates.add(dateString);
+      });
+      body.put(isin, quotes);
+    }
+
+    LinkedHashSet<String> days = DateUtils.sortDates(dates);
+    for (Map<String, BigDecimal> isinData : body.values()) {
+      DateUtils.fillGaps(days, isinData);
+    }
+
+    //computeTotal
+    Map<String, BigDecimal> total = new HashMap<>();
+    findAllIsin().forEach(isin -> {
+      Map<String, BigDecimal> values = body.get(isin);
+      days.forEach(day -> {
+        BigDecimal value = values.get(day);
+        BigDecimal currentSum = total.getOrDefault(day, BigDecimal.ZERO);
+        total.put(day, currentSum.add(value));
+      });
+    });
+    isinList.add("Total");
+    body.put("Total", total);
+
+    GraphPointsDto result = new GraphPointsDto();
+    result.setLineNames(isinList);
+    result.setXLabels(days);
+    result.setData(body);
+
+    return result;
   }
 
   @SneakyThrows

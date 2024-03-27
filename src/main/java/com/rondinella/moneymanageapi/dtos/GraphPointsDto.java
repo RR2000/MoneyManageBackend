@@ -7,17 +7,14 @@ import lombok.Setter;
 
 import java.io.Serializable;
 import java.math.BigDecimal;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 @Getter
 @Setter
 @AllArgsConstructor
 @NoArgsConstructor
 public class GraphPointsDto implements Serializable {
-  List<String> xLabels = new ArrayList<>();
+  LinkedHashSet<String> xLabels = new LinkedHashSet<>();
   List<String> lineNames = new ArrayList<>();
   Map<String, Map<String, BigDecimal>> data = new HashMap<>();
 }

@@ -1,5 +1,6 @@
 package com.rondinella.moneymanageapi.controllers;
 
+import com.rondinella.moneymanageapi.common.DateUtils;
 import com.rondinella.moneymanageapi.services.BrokerTransactionService;
 import lombok.SneakyThrows;
 import org.springframework.http.HttpStatus;
@@ -22,6 +23,13 @@ public class BrokerTransactionsController {
     this.brokerTransactionService = brokerTransactionService;
   }
 
+  @GetMapping("/worth/graph")
+  public Object worthGraph(){
+    Timestamp f = DateUtils.stringToTimestamp("2023-01-01");
+    Timestamp t = DateUtils.todayAsTimestamp();
+    return brokerTransactionService.worthGraph(f, t);
+  }
+
   @SneakyThrows
   @GetMapping("/luckySearch/{query}")
   public Stock luckySearch(@PathVariable String query) {
@@ -35,8 +43,8 @@ public class BrokerTransactionsController {
   }
 
   @GetMapping("/worth/{timestamp}")
-  public BigDecimal worthAtDatetime(@PathVariable Timestamp timestamp) {
-    return brokerTransactionService.worthAtDatetime(timestamp);
+  public BigDecimal worthAtDatetime(@PathVariable String timestamp) {
+    return brokerTransactionService.worthAtDatetime(DateUtils.stringToTimestamp(timestamp));
   }
 
   @PostMapping(value = "/upload", consumes = "text/csv")

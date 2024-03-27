@@ -13,10 +13,7 @@ import java.io.IOException;
 import java.io.StringReader;
 import java.math.BigDecimal;
 import java.sql.Timestamp;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 @Service
 public class BankTransactionService {
@@ -85,38 +82,9 @@ public class BankTransactionService {
     return bankTransactionMapper.toDto(bankTransactions);
   }
 
-  private BigDecimal fillGapsRecursive(int index, List<String> daysList, Map<String, BigDecimal> points, BigDecimal lastDayValue) {
-    if (index < daysList.size()) {
-      String today = daysList.get(index);
-      BigDecimal value = points.get(today);
-
-      if (value == null) {
-        value = fillGapsRecursive(index + 1, daysList, points, lastDayValue);
-      }
-
-      fillGapsRecursive(index + 1, daysList, points, lastDayValue);
-      points.put(today, value);
-      return value;
-    } else {
-      return lastDayValue;
-    }
-  }
-
-  private void fillGaps(List<String> daysList, Map<String, BigDecimal> points) {
-    BigDecimal lastDayValue = null;
-    for (int i = daysList.size() - 1; i >= 0; i--) {
-      String lastDay = daysList.get(i);
-      lastDayValue = points.get(lastDay);
-      if (lastDayValue != null)
-        break;
-    }
-
-    fillGapsRecursive(0, daysList, points, lastDayValue);
-  }
-
   public GraphPointsDto historyBetweenDates(Timestamp startTimestamp, Timestamp endTimestamp) {
     GraphPointsDto result = new GraphPointsDto();
-    List<String> daysList = DateUtils.getAllDaysBetweenTimestamps(startTimestamp, endTimestamp);
+    LinkedHashSet<String> daysList = DateUtils.getAllDaysBetweenTimestamps(startTimestamp, endTimestamp);
     List<String> accounts = bankTransactionRepository.findDistinctAccounts();
 
     result.setXLabels(daysList);
@@ -128,7 +96,7 @@ public class BankTransactionService {
         points.put(simpleDate, bankTransaction.getCumulativeAmount());
       }
       result.getLineNames().add(account);
-      fillGaps(daysList, points);
+      DateUtils.fillGaps(daysList, points);
       result.getData().put(account, points);
     }
 
