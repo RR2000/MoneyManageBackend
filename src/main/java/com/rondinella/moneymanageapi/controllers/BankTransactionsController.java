@@ -14,7 +14,7 @@ import java.util.List;
 
 @RestController
 @CrossOrigin(origins = "http://localhost:4200") // Allow requests from Angular app
-@RequestMapping("/api/bankTransactions")
+@RequestMapping("/api/banks/transactions")
 public class BankTransactionsController {
 
   private final BankTransactionService bankTransactionService;
