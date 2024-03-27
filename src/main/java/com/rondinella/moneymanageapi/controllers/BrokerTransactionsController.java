@@ -9,6 +9,7 @@ import yahoofinance.Stock;
 import yahoofinance.YahooFinance;
 
 import java.math.BigDecimal;
+import java.sql.Timestamp;
 
 @RestController
 @CrossOrigin(origins = "http://localhost:4200") // Allow requests from Angular app
@@ -31,6 +32,11 @@ public class BrokerTransactionsController {
   @GetMapping("/worth")
   public BigDecimal worth() {
     return brokerTransactionService.worthRightNow();
+  }
+
+  @GetMapping("/worth/{timestamp}")
+  public BigDecimal worthAtDatetime(@PathVariable Timestamp timestamp) {
+    return brokerTransactionService.worthAtDatetime(timestamp);
   }
 
   @PostMapping(value = "/upload", consumes = "text/csv")

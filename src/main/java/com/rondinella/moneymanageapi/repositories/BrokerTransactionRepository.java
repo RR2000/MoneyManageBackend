@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.math.BigDecimal;
+import java.sql.Timestamp;
 import java.util.List;
 
 public interface BrokerTransactionRepository extends JpaRepository<BrokerTransaction, BrokerTransactionId> {
@@ -15,4 +16,7 @@ public interface BrokerTransactionRepository extends JpaRepository<BrokerTransac
 
   @Query("SELECT SUM(t.quantity) FROM BrokerTransaction t WHERE t.isin = :isin")
   BigDecimal totalQuantityByIsin(@Param("isin") String isin);
+
+  @Query("SELECT SUM(t.quantity) FROM BrokerTransaction t WHERE t.isin = :isin AND t.datetime <= :datetime")
+  BigDecimal totalQuantityByIsinGreaterThan(@Param("isin") String isin, @Param("datetime")Timestamp datetime);
 }

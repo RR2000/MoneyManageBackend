@@ -1,16 +1,19 @@
 package com.rondinella.moneymanageapi.services;
 
 import com.rondinella.moneymanageapi.common.CsvUtils;
+import com.rondinella.moneymanageapi.common.DateUtils;
 import com.rondinella.moneymanageapi.dtos.BrokerTransactionDto;
 import com.rondinella.moneymanageapi.enitities.BrokerTransaction;
 import com.rondinella.moneymanageapi.mappers.BrokerTransactionMapper;
 import com.rondinella.moneymanageapi.repositories.BrokerTransactionRepository;
+import lombok.SneakyThrows;
 import org.springframework.stereotype.Service;
 import yahoofinance.Stock;
 import yahoofinance.YahooFinance;
 
 import java.io.IOException;
 import java.math.BigDecimal;
+import java.sql.Timestamp;
 import java.util.List;
 import java.util.Map;
 
@@ -31,6 +34,25 @@ public class BrokerTransactionService {
 
   public List<String> findAllIsin() {
     return brokerTransactionRepository.findDistinctIsin();
+  }
+
+  @SneakyThrows
+  public BigDecimal worthAtDatetime(Timestamp datetime) {
+    List<String> isinList = findAllIsin();
+    BigDecimal worth = BigDecimal.ZERO;
+    Stock usdEur = luckySearchStock("USD/EUR");
+    for (String isin : isinList) {
+      String stockTicker = luckySearchTicker(isin);
+      Stock stock = YahooFinance.get(stockTicker, DateUtils.toCalendar(datetime));
+      BigDecimal thanValue = stock.getHistory().get(0).getClose();
+      BigDecimal isinQuantity = brokerTransactionRepository.totalQuantityByIsinGreaterThan(isin, datetime);
+      isinQuantity = isinQuantity == null ? BigDecimal.ZERO : isinQuantity;
+      if (stock.getCurrency().equals("USD"))
+        thanValue = thanValue.multiply(usdEur.getQuote().getPreviousClose());
+      worth = worth.add(thanValue.multiply(isinQuantity));
+    }
+
+    return worth;
   }
 
   public BigDecimal worthRightNow() {

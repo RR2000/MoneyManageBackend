@@ -7,7 +7,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 
-public class DateUtils {
+public class DateUtils extends org.apache.commons.lang3.time.DateUtils{
   public static List<String> getAllDaysBetweenTimestamps(Timestamp startTimestamp, Timestamp endTimestamp) {
     List<String> allDays = new ArrayList<>();
 
