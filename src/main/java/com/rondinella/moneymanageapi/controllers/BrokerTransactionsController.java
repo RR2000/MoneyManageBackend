@@ -12,7 +12,7 @@ import java.math.BigDecimal;
 
 @RestController
 @CrossOrigin(origins = "http://localhost:4200") // Allow requests from Angular app
-@RequestMapping("/api/brokerTransactions")
+@RequestMapping("/api/brokers/transactions")
 public class BrokerTransactionsController {
   final
   BrokerTransactionService brokerTransactionService;
