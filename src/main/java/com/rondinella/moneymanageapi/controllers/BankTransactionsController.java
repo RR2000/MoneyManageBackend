@@ -68,8 +68,8 @@ public class BankTransactionsController {
     return ResponseEntity.status(HttpStatus.CREATED).body(bankTransactionService.addTransactions(transactionsDto));
   }
 
-  @PostMapping(value = "/upload", consumes = "text/csv")
-  public ResponseEntity<?> uploadTransactions(@RequestBody String csvData) {
-    return ResponseEntity.status(HttpStatus.CREATED).body(bankTransactionService.addTransactionsFromCsv(csvData, BankName.Revolut));
+  @PostMapping(value = "/{bankName}/upload", consumes = "text/csv")
+  public ResponseEntity<?> uploadTransactions(@RequestBody String csvData, @PathVariable BankName bankName) {
+    return ResponseEntity.status(HttpStatus.CREATED).body(bankTransactionService.addTransactionsFromCsv(csvData, bankName));
   }
 }

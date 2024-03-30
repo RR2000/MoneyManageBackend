@@ -1,5 +1,6 @@
 package com.rondinella.moneymanageapi.services;
 
+import com.opencsv.CSVReader;
 import com.rondinella.moneymanageapi.common.DateUtils;
 import com.rondinella.moneymanageapi.dtos.BankTransactionDto;
 import com.rondinella.moneymanageapi.dtos.GraphPointsDto;
@@ -18,6 +19,7 @@ import java.util.*;
 @Service
 public class BankTransactionService {
   public enum BankName {
+    Degiro,
     Revolut,
     Sanpaolo
   }
@@ -133,6 +135,42 @@ public class BankTransactionService {
     return bankTransactionDtos;
   }
 
+  public List<BankTransactionDto> degiroCsv(String csvData) throws IOException {
+    List<BankTransactionDto> bankTransactionDtos = new ArrayList<>();
+
+    String[] headers;
+    Map<String, Object> rowData;
+
+    try (CSVReader reader = new CSVReader(new StringReader(csvData))) {
+      headers = reader.readNext();
+      for (int i = 0; i < headers.length; i++) {
+        if(headers[i].isEmpty())
+          headers[i] = String.valueOf(i);
+      }
+
+      String[] line;
+      while ((line = reader.readNext()) != null) {
+        rowData = new HashMap<>();
+        for (int i = 0; i < headers.length; i++) {
+          String value = (i < line.length) ? line[i] : ""; // Handle missing values
+          rowData.put(headers[i], value);
+        }
+        if(((String)rowData.get("8")).isEmpty())
+          continue;
+
+        BankTransactionDto bankTransactionDto = bankTransactionMapper.toDtoFromDegiro(rowData);
+
+        if(bankTransactionDto.getDescription().equals("Degiro Cash Sweep Transfer"))
+          continue;
+
+        bankTransactionDtos.add(bankTransactionDto);
+      }
+    }
+
+    return bankTransactionDtos;
+  }
+
+
   public List<BankTransactionDto> addTransactionsFromCsv(String csvData, BankName bankName) {
     if (csvData == null || csvData.isEmpty()) {
       throw new RuntimeException("CSV data is empty");
@@ -140,6 +178,7 @@ public class BankTransactionService {
     try {
       List<BankTransactionDto> bankTransactionDtos;
       switch (bankName) {
+        case Degiro -> bankTransactionDtos = degiroCsv(csvData);
         case Revolut -> bankTransactionDtos = revolutCsv(csvData);
         case Sanpaolo -> throw new RuntimeException("Sanpaolo not implemented yet");
         default -> throw new RuntimeException("Impossible to be here");

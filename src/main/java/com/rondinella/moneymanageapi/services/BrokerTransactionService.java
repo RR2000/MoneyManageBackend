@@ -38,7 +38,7 @@ public class BrokerTransactionService {
   }
 
   @SneakyThrows
-  public Object worthGraph(Timestamp fromTimestamp, Timestamp toTimestamp) {
+  public GraphPointsDto worthGraph(Timestamp fromTimestamp, Timestamp toTimestamp) {
     Calendar from = DateUtils.toCalendar(fromTimestamp);
     Calendar to = DateUtils.toCalendar(toTimestamp);
     Interval interval = Interval.WEEKLY;
@@ -71,7 +71,7 @@ public class BrokerTransactionService {
     findAllIsin().forEach(isin -> {
       Map<String, BigDecimal> values = body.get(isin);
       days.forEach(day -> {
-        BigDecimal value = values.get(day);
+        BigDecimal value = values.getOrDefault(day, BigDecimal.ZERO);
         BigDecimal currentSum = total.getOrDefault(day, BigDecimal.ZERO);
         total.put(day, currentSum.add(value));
       });

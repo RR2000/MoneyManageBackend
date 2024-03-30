@@ -16,9 +16,9 @@ public interface BrokerTransactionRepository extends JpaRepository<BrokerTransac
   @Query("SELECT DISTINCT t.isin FROM BrokerTransaction t")
   List<String> findDistinctIsin();
 
-  @Query("SELECT SUM(t.quantity) FROM BrokerTransaction t WHERE t.isin = :isin")
+  @Query("SELECT COALESCE(SUM(t.quantity), 0) FROM BrokerTransaction t WHERE t.isin = :isin")
   BigDecimal totalQuantityByIsin(@Param("isin") String isin);
 
-  @Query("SELECT SUM(t.quantity) FROM BrokerTransaction t WHERE t.isin = :isin AND t.datetime <= :datetime")
+  @Query("SELECT COALESCE(SUM(t.quantity), 0) FROM BrokerTransaction t WHERE t.isin = :isin AND t.datetime <= :datetime")
   BigDecimal totalQuantityByIsinGreaterThan(@Param("isin") String isin, @Param("datetime")Timestamp datetime);
 }

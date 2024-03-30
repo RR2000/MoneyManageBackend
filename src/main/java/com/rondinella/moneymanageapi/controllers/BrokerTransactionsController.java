@@ -1,6 +1,7 @@
 package com.rondinella.moneymanageapi.controllers;
 
 import com.rondinella.moneymanageapi.common.DateUtils;
+import com.rondinella.moneymanageapi.dtos.GraphPointsDto;
 import com.rondinella.moneymanageapi.services.BrokerTransactionService;
 import lombok.SneakyThrows;
 import org.springframework.http.HttpStatus;
@@ -24,8 +25,8 @@ public class BrokerTransactionsController {
   }
 
   @GetMapping("/worth/graph")
-  public Object worthGraph(){
-    Timestamp f = DateUtils.stringToTimestamp("2023-01-01");
+  public GraphPointsDto worthGraph(){
+    Timestamp f = DateUtils.stringToTimestamp("2021-09-01");
     Timestamp t = DateUtils.todayAsTimestamp();
     return brokerTransactionService.worthGraph(f, t);
   }
