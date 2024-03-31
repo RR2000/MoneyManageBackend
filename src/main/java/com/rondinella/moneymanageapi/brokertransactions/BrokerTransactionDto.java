@@ -1,4 +1,4 @@
-package com.rondinella.moneymanageapi.dtos;
+package com.rondinella.moneymanageapi.brokertransactions;
 
 import lombok.*;
 
@@ -7,7 +7,7 @@ import java.math.BigDecimal;
 import java.sql.Timestamp;
 
 /**
- * DTO for {@link com.rondinella.moneymanageapi.enitities.BrokerTransaction}
+ * DTO for {@link BrokerTransaction}
  */
 @Getter
 @Setter

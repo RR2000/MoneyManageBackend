@@ -1,6 +1,6 @@
-package com.rondinella.moneymanageapi.enitities;
+package com.rondinella.moneymanageapi.banktransactions;
 
-import com.rondinella.moneymanageapi.enitities.ids.BankTransactionId;
+import com.rondinella.moneymanageapi.banktransactions.BankTransactionId;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.IdClass;

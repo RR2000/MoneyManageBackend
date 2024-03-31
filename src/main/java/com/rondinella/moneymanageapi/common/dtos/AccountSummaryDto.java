@@ -1,4 +1,4 @@
-package com.rondinella.moneymanageapi.dtos;
+package com.rondinella.moneymanageapi.common.dtos;
 
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -14,7 +14,7 @@ import java.util.List;
 @Setter
 @AllArgsConstructor
 @NoArgsConstructor
-public class AccountSummary {
+public class AccountSummaryDto {
   @Getter
   @Setter
   @AllArgsConstructor

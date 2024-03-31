@@ -1,8 +1,7 @@
-package com.rondinella.moneymanageapi.controllers;
+package com.rondinella.moneymanageapi.brokertransactions;
 
 import com.rondinella.moneymanageapi.common.Utils;
-import com.rondinella.moneymanageapi.dtos.GraphPointsDto;
-import com.rondinella.moneymanageapi.services.BrokerTransactionService;
+import com.rondinella.moneymanageapi.common.dtos.GraphPointsDto;
 import lombok.SneakyThrows;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;

@@ -1,6 +1,6 @@
-package com.rondinella.moneymanageapi.repositories;
+package com.rondinella.moneymanageapi.banktransactions;
 
-import com.rondinella.moneymanageapi.enitities.BankTransaction;
+import com.rondinella.moneymanageapi.banktransactions.BankTransaction;
 import io.swagger.v3.oas.annotations.Hidden;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;

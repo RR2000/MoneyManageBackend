@@ -1,6 +1,6 @@
-package com.rondinella.moneymanageapi.enitities;
+package com.rondinella.moneymanageapi.brokertransactions;
 
-import com.rondinella.moneymanageapi.enitities.ids.BrokerTransactionId;
+import com.rondinella.moneymanageapi.brokertransactions.BrokerTransactionId;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.IdClass;

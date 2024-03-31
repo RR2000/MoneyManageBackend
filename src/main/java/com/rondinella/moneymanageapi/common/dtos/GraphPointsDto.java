@@ -1,4 +1,4 @@
-package com.rondinella.moneymanageapi.dtos;
+package com.rondinella.moneymanageapi.common.dtos;
 
 import lombok.AllArgsConstructor;
 import lombok.Getter;

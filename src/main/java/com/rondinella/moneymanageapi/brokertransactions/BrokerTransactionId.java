@@ -1,4 +1,4 @@
-package com.rondinella.moneymanageapi.enitities.ids;
+package com.rondinella.moneymanageapi.brokertransactions;
 
 import java.io.Serializable;
 import java.math.BigDecimal;

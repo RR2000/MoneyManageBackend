@@ -1,4 +1,4 @@
-package com.rondinella.moneymanageapi.enitities.ids;
+package com.rondinella.moneymanageapi.banktransactions;
 
 import lombok.AllArgsConstructor;
 import lombok.Getter;

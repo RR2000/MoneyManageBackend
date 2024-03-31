@@ -1,8 +1,6 @@
-package com.rondinella.moneymanageapi.controllers;
+package com.rondinella.moneymanageapi.banktransactions;
 
-import com.rondinella.moneymanageapi.dtos.BankTransactionDto;
-import com.rondinella.moneymanageapi.services.BankTransactionService;
-import com.rondinella.moneymanageapi.services.BankTransactionService.BankName;
+import com.rondinella.moneymanageapi.banktransactions.BankTransactionService.BankName;
 import io.swagger.v3.oas.annotations.Parameter;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;

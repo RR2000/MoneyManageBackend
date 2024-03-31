@@ -1,12 +1,8 @@
-package com.rondinella.moneymanageapi.services;
+package com.rondinella.moneymanageapi.banktransactions;
 
 import com.opencsv.CSVReader;
 import com.rondinella.moneymanageapi.common.Utils;
-import com.rondinella.moneymanageapi.dtos.BankTransactionDto;
-import com.rondinella.moneymanageapi.dtos.GraphPointsDto;
-import com.rondinella.moneymanageapi.enitities.BankTransaction;
-import com.rondinella.moneymanageapi.mappers.BankTransactionMapper;
-import com.rondinella.moneymanageapi.repositories.BankTransactionRepository;
+import com.rondinella.moneymanageapi.common.dtos.GraphPointsDto;
 import org.springframework.stereotype.Service;
 
 import java.io.BufferedReader;

@@ -1,7 +1,7 @@
-package com.rondinella.moneymanageapi.repositories;
+package com.rondinella.moneymanageapi.brokertransactions;
 
-import com.rondinella.moneymanageapi.enitities.BrokerTransaction;
-import com.rondinella.moneymanageapi.enitities.ids.BrokerTransactionId;
+import com.rondinella.moneymanageapi.brokertransactions.BrokerTransaction;
+import com.rondinella.moneymanageapi.brokertransactions.BrokerTransactionId;
 import io.swagger.v3.oas.annotations.Hidden;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;

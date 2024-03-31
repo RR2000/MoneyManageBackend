@@ -1,7 +1,5 @@
-package com.rondinella.moneymanageapi.mappers;
+package com.rondinella.moneymanageapi.brokertransactions;
 
-import com.rondinella.moneymanageapi.dtos.BrokerTransactionDto;
-import com.rondinella.moneymanageapi.enitities.BrokerTransaction;
 import lombok.SneakyThrows;
 import org.mapstruct.Mapper;
 

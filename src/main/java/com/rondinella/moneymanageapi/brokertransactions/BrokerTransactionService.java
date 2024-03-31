@@ -1,12 +1,8 @@
-package com.rondinella.moneymanageapi.services;
+package com.rondinella.moneymanageapi.brokertransactions;
 
-import com.rondinella.moneymanageapi.common.CsvUtils;
+import com.rondinella.moneymanageapi.banktransactions.BankTransactionService;
 import com.rondinella.moneymanageapi.common.Utils;
-import com.rondinella.moneymanageapi.dtos.BrokerTransactionDto;
-import com.rondinella.moneymanageapi.dtos.GraphPointsDto;
-import com.rondinella.moneymanageapi.enitities.BrokerTransaction;
-import com.rondinella.moneymanageapi.mappers.BrokerTransactionMapper;
-import com.rondinella.moneymanageapi.repositories.BrokerTransactionRepository;
+import com.rondinella.moneymanageapi.common.dtos.GraphPointsDto;
 import lombok.SneakyThrows;
 import org.springframework.stereotype.Service;
 import yahoofinance.Stock;
@@ -128,7 +124,7 @@ public class BrokerTransactionService {
   }
 
   private List<BrokerTransactionDto> degiroCsv(String csvData) throws IOException {
-    List<Map<String, String>> degiroMap = CsvUtils.csvToMap(csvData);
+    List<Map<String, String>> degiroMap = Utils.csvToMap(csvData);
 
     return brokerTransactionMapper.toDtoFromDegiro(degiroMap);
   }

@@ -1,6 +1,5 @@
-package com.rondinella.moneymanageapi.dtos;
+package com.rondinella.moneymanageapi.banktransactions;
 
-import com.rondinella.moneymanageapi.enitities.BankTransaction;
 import lombok.*;
 
 import java.io.Serializable;

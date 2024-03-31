@@ -2,6 +2,9 @@ package com.rondinella.moneymanageapi.common;
 
 import lombok.SneakyThrows;
 
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.StringReader;
 import java.math.BigDecimal;
 import java.sql.Timestamp;
 import java.text.SimpleDateFormat;
@@ -11,6 +14,31 @@ import java.time.format.DateTimeFormatter;
 import java.util.*;
 
 public class Utils extends org.apache.commons.lang3.time.DateUtils {
+
+  public static List<Map<String, String>> csvToMap(String csvData) {
+    List<Map<String, String>> result = new ArrayList<>();
+    BufferedReader reader = new BufferedReader(new StringReader(csvData));
+    String line;
+    try {
+      String[] headers = reader.readLine().split(",");
+      while ((line = reader.readLine()) != null) {
+        String[] data = line.split(",", -1);
+        if (data.length != headers.length)
+          throw new RuntimeException("data != headers length");
+
+        Map<String, String> rowData = new HashMap<>();
+        for (int i = 0; i < headers.length; i++) {
+          rowData.put(headers[i], data[i]);
+        }
+
+        result.add(rowData);
+      }
+    } catch (IOException e) {
+      throw new RuntimeException(e);
+    }
+
+    return result;
+  }
 
   public static void fillGaps(Set<String> daysList, Map<String, BigDecimal> points) {
     LinkedHashSet<String> orderedDaysList = new LinkedHashSet<>();
