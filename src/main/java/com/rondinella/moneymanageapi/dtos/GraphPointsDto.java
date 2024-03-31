@@ -1,8 +1,16 @@
 package com.rondinella.moneymanageapi.dtos;
+
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.Setter;
+
 import java.io.Serializable;
 import java.math.BigDecimal;
 import java.util.*;
 
+@Getter
+@Setter
+@AllArgsConstructor
 public class GraphPointsDto implements Serializable {
   private final Map<String, Map<String, BigDecimal>> graphData = new TreeMap<>();
   private final Set<String> uniqueLabels = new TreeSet<>();
@@ -125,6 +133,14 @@ public class GraphPointsDto implements Serializable {
 
     // If no non-null value is found in previous labels, return null
     return null;
+  }
+
+  public String getFirstLabel() {
+    return ((TreeSet<String>)uniqueLabels).first();
+  }
+
+  public String getLastLabel() {
+    return ((TreeSet<String>)uniqueLabels).last();
   }
 
   public void addTotalColumn(String totalColumnName, String... graphNames) {

@@ -17,7 +17,9 @@ import yahoofinance.histquotes.Interval;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.sql.Timestamp;
-import java.util.*;
+import java.util.Calendar;
+import java.util.List;
+import java.util.Map;
 
 @Service
 public class BrokerTransactionService {
@@ -58,7 +60,7 @@ public class BrokerTransactionService {
         String dateString = Utils.calendarToString(quote.getDate());
         Timestamp dateTimestamp = Utils.stringToTimestamp(dateString);
         BigDecimal totalQuantity = brokerTransactionRepository.totalQuantityByIsinGreaterThan(isin, dateTimestamp);
-        if (totalQuantity.compareTo(BigDecimal.ZERO) > 0 || bought) {
+        if (quote.getClose() != null && (totalQuantity.compareTo(BigDecimal.ZERO) > 0 || bought)) {
           BigDecimal value = quote.getClose().multiply(totalQuantity);
           result.addPoint(isin, dateString, value);
           bought = true;

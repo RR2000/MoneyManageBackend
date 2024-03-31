@@ -114,6 +114,7 @@ public class BankTransactionService {
       result.addPoints(account, points);
     }
 
+    result.validateAndFillMissingValues();
     return result;
   }
 
