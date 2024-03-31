@@ -1,6 +1,7 @@
 package com.rondinella.moneymanageapi.services;
 
-import com.rondinella.moneymanageapi.common.DateUtils;
+import com.opencsv.CSVReader;
+import com.rondinella.moneymanageapi.common.Utils;
 import com.rondinella.moneymanageapi.dtos.BankTransactionDto;
 import com.rondinella.moneymanageapi.dtos.GraphPointsDto;
 import com.rondinella.moneymanageapi.enitities.BankTransaction;
@@ -13,14 +14,12 @@ import java.io.IOException;
 import java.io.StringReader;
 import java.math.BigDecimal;
 import java.sql.Timestamp;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 @Service
 public class BankTransactionService {
   public enum BankName {
+    Degiro,
     Revolut,
     Sanpaolo
   }
@@ -85,51 +84,34 @@ public class BankTransactionService {
     return bankTransactionMapper.toDto(bankTransactions);
   }
 
-  private BigDecimal fillGapsRecursive(int index, List<String> daysList, Map<String, BigDecimal> points, BigDecimal lastDayValue) {
-    if (index < daysList.size()) {
-      String today = daysList.get(index);
-      BigDecimal value = points.get(today);
+  public Map<String, BigDecimal> getDailyDepositSum(String account, Timestamp startTimestamp, Timestamp endTimestamp) {
+    List<Object[]> results = bankTransactionRepository.findDailyDepositSumByAccountAndDateRange(account, startTimestamp, endTimestamp);
+    Map<String, BigDecimal> dailyDepositSumMap = new LinkedHashMap<>();
 
-      if (value == null) {
-        value = fillGapsRecursive(index + 1, daysList, points, lastDayValue);
-      }
-
-      fillGapsRecursive(index + 1, daysList, points, lastDayValue);
-      points.put(today, value);
-      return value;
-    } else {
-      return lastDayValue;
-    }
-  }
-
-  private void fillGaps(List<String> daysList, Map<String, BigDecimal> points) {
-    BigDecimal lastDayValue = null;
-    for(int i = daysList.size() - 1; i >= 0; i--){
-      String lastDay = daysList.get(i);
-      lastDayValue = points.get(lastDay);
-      if(lastDayValue != null)
-        break;
+    // Iterate over the results and add the deposit sum for each day to the map
+    BigDecimal sum = BigDecimal.ZERO;
+    for (Object[] result : results) {
+      String day = Utils.convertDateToString((Date) result[0]);
+      sum = sum.add((BigDecimal) result[1]);
+      dailyDepositSumMap.put(day, sum);
     }
 
-    fillGapsRecursive(0, daysList, points, lastDayValue);
+    return dailyDepositSumMap;
   }
 
   public GraphPointsDto historyBetweenDates(Timestamp startTimestamp, Timestamp endTimestamp) {
     GraphPointsDto result = new GraphPointsDto();
-    List<String> daysList = DateUtils.getAllDaysBetweenTimestamps(startTimestamp, endTimestamp);
+    LinkedHashSet<String> daysList = Utils.getAllDaysBetweenTimestamps(startTimestamp, endTimestamp);
     List<String> accounts = bankTransactionRepository.findDistinctAccounts();
 
-    result.setXLabels(daysList);
     for (String account : accounts) {
       Map<String, BigDecimal> points = new HashMap<>();
       List<BankTransaction> bankTransactions = bankTransactionRepository.findByDatetimeBetweenAndAccountOrderByDatetime(startTimestamp, endTimestamp, account);
       for (BankTransaction bankTransaction : bankTransactions) {
-        String simpleDate = DateUtils.convertTimestampToString(bankTransaction.getDatetime());
+        String simpleDate = Utils.convertTimestampToString(bankTransaction.getDatetime());
         points.put(simpleDate, bankTransaction.getCumulativeAmount());
       }
-      result.getLineNames().add(account);
-      fillGaps(daysList, points);
-      result.getData().put(account, points);
+      result.addPoints(account, points);
     }
 
     return result;
@@ -159,11 +141,47 @@ public class BankTransactionService {
         rowData.put(headers[i], data[i]);
       }
 
-      BankTransactionDto bankTransactionDto = bankTransactionMapper.toDto(rowData);
+      BankTransactionDto bankTransactionDto = bankTransactionMapper.toDtoFromRevolut(rowData);
       bankTransactionDtos.add(bankTransactionDto);
     }
     return bankTransactionDtos;
   }
+
+  public List<BankTransactionDto> degiroCsv(String csvData) throws IOException {
+    List<BankTransactionDto> bankTransactionDtos = new ArrayList<>();
+
+    String[] headers;
+    Map<String, Object> rowData;
+
+    try (CSVReader reader = new CSVReader(new StringReader(csvData))) {
+      headers = reader.readNext();
+      for (int i = 0; i < headers.length; i++) {
+        if (headers[i].isEmpty())
+          headers[i] = String.valueOf(i);
+      }
+
+      String[] line;
+      while ((line = reader.readNext()) != null) {
+        rowData = new HashMap<>();
+        for (int i = 0; i < headers.length; i++) {
+          String value = (i < line.length) ? line[i] : ""; // Handle missing values
+          rowData.put(headers[i], value);
+        }
+        if (((String) rowData.get("8")).isEmpty())
+          continue;
+
+        BankTransactionDto bankTransactionDto = bankTransactionMapper.toDtoFromDegiro(rowData);
+
+        if (bankTransactionDto.getDescription().equals("Degiro Cash Sweep Transfer"))
+          continue;
+
+        bankTransactionDtos.add(bankTransactionDto);
+      }
+    }
+
+    return bankTransactionDtos;
+  }
+
 
   public List<BankTransactionDto> addTransactionsFromCsv(String csvData, BankName bankName) {
     if (csvData == null || csvData.isEmpty()) {
@@ -172,6 +190,7 @@ public class BankTransactionService {
     try {
       List<BankTransactionDto> bankTransactionDtos;
       switch (bankName) {
+        case Degiro -> bankTransactionDtos = degiroCsv(csvData);
         case Revolut -> bankTransactionDtos = revolutCsv(csvData);
         case Sanpaolo -> throw new RuntimeException("Sanpaolo not implemented yet");
         default -> throw new RuntimeException("Impossible to be here");
