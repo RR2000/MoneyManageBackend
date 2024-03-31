@@ -26,7 +26,7 @@ public class BrokerTransactionsController {
 
   @GetMapping("/worth/graph")
   public GraphPointsDto worthGraph(){
-    Timestamp f = Utils.stringToTimestamp("2021-06-01");
+    Timestamp f = Utils.stringToTimestamp("2021-01-01");
     Timestamp t = Utils.todayAsTimestamp();
     return brokerTransactionService.worthGraph(f, t);
   }

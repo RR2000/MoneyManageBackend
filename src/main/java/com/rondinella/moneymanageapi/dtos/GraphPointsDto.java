@@ -1,16 +1,8 @@
 package com.rondinella.moneymanageapi.dtos;
-
-import lombok.AllArgsConstructor;
-import lombok.Getter;
-import lombok.Setter;
-
 import java.io.Serializable;
 import java.math.BigDecimal;
 import java.util.*;
 
-@Getter
-@Setter
-@AllArgsConstructor
 public class GraphPointsDto implements Serializable {
   private final Map<String, Map<String, BigDecimal>> graphData = new TreeMap<>();
   private final Set<String> uniqueLabels = new TreeSet<>();
@@ -61,18 +53,31 @@ public class GraphPointsDto implements Serializable {
     graphData.values().forEach(graph -> graph.remove(label));
   }
 
-  public void removeOrphanLabels() {
-    uniqueLabels.retainAll(graphData.values().stream().flatMap(graph -> graph.keySet().stream()).toList());
-  }
-
   public void setLabels(List<String> labels) {
     uniqueLabels.clear();
     uniqueLabels.addAll(labels);
-    removeOrphanLabels();
+  }
+
+  public void removeOrphanLabels() {
+    Set<String> labelsToRemove = new HashSet<>();
+    for (String label : uniqueLabels) {
+      boolean allNull = true;
+      for (String graphName : uniqueGraphNames) {
+        Map<String, BigDecimal> graph = graphData.get(graphName);
+        if (graph != null && graph.containsKey(label) && graph.get(label) != null) {
+          allNull = false;
+          break;
+        }
+      }
+      if (allNull) {
+        labelsToRemove.add(label);
+      }
+    }
+    uniqueLabels.removeAll(labelsToRemove);
   }
 
   public void add(GraphPointsDto otherDto) {
-    for (Map.Entry<String, Map<String, BigDecimal>> entry : otherDto.getGraphData().entrySet()) {
+    for (Map.Entry<String, Map<String, BigDecimal>> entry : otherDto.graphData.entrySet()) {
       String graphName = entry.getKey();
       Map<String, BigDecimal> points = entry.getValue();
 
@@ -91,6 +96,7 @@ public class GraphPointsDto implements Serializable {
   }
 
   public void validateAndFillMissingValues() {
+    removeOrphanLabels();
     for (String graphName : uniqueGraphNames) {
       Map<String, BigDecimal> graph = graphData.get(graphName);
       for (String label : uniqueLabels) {

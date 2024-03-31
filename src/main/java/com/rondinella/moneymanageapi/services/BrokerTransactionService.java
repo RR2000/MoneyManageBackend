@@ -11,6 +11,7 @@ import lombok.SneakyThrows;
 import org.springframework.stereotype.Service;
 import yahoofinance.Stock;
 import yahoofinance.YahooFinance;
+import yahoofinance.histquotes.HistoricalQuote;
 import yahoofinance.histquotes.Interval;
 
 import java.io.IOException;
@@ -52,37 +53,23 @@ public class BrokerTransactionService {
     for (String isin : isinList) {
       String stockTicker = luckySearchTicker(isin);
       Stock stock = YahooFinance.get(stockTicker, from, to, interval);
-      stock.getHistory().forEach((quote) -> {
+      boolean bought = false;
+      for (HistoricalQuote quote : stock.getHistory()) {
         String dateString = Utils.calendarToString(quote.getDate());
         Timestamp dateTimestamp = Utils.stringToTimestamp(dateString);
         BigDecimal totalQuantity = brokerTransactionRepository.totalQuantityByIsinGreaterThan(isin, dateTimestamp);
-        BigDecimal value = quote.getClose().multiply(totalQuantity);
-        result.addPoint(isin, dateString, value);
-      });
+        if (totalQuantity.compareTo(BigDecimal.ZERO) > 0 || bought) {
+          BigDecimal value = quote.getClose().multiply(totalQuantity);
+          result.addPoint(isin, dateString, value);
+          bought = true;
+        }
+      }
     }
 
-    //computeTotal
-    findAllIsin().forEach(isin -> {
-      Map<String, BigDecimal> pairs = result.getGraph(isin);
-      BigDecimal currentSum = BigDecimal.ZERO;
-      for (Map.Entry<String, BigDecimal> entry : pairs.entrySet()) {
-        String day = entry.getKey();
-        currentSum = currentSum.add(result.getPointValue(isin, day));
-        result.addPoint("Total", day, currentSum);
-      }
-    });
-
     result.addPoints("Degiro", bankTransactionService.getDailyDepositSum("degiro", fromTimestamp, toTimestamp));
-    //compute wired money
-    /*
-    GraphPointsDto bank = bankTransactionService.depositHistoryBetweenDates(
-        fromTimestamp, toTimestamp,
-        new ArrayList<>(result.getUniqueLabels())
-    );
 
-    result.addPoints("Degiro", bank.getGraph("Degiro"));*/
     result.validateAndFillMissingValues();
-    result.addTotalColumn("Total", isinList);
+    result.addTotalColumn("Total Worth", isinList);
 
     return result;
   }
