@@ -1,7 +1,7 @@
 package com.rondinella.moneymanageapi.services;
 
 import com.opencsv.CSVReader;
-import com.rondinella.moneymanageapi.common.DateUtils;
+import com.rondinella.moneymanageapi.common.Utils;
 import com.rondinella.moneymanageapi.dtos.BankTransactionDto;
 import com.rondinella.moneymanageapi.dtos.GraphPointsDto;
 import com.rondinella.moneymanageapi.enitities.BankTransaction;
@@ -84,22 +84,34 @@ public class BankTransactionService {
     return bankTransactionMapper.toDto(bankTransactions);
   }
 
+  public Map<String, BigDecimal> getDailyDepositSum(String account, Timestamp startTimestamp, Timestamp endTimestamp) {
+    List<Object[]> results = bankTransactionRepository.findDailyDepositSumByAccountAndDateRange(account, startTimestamp, endTimestamp);
+    Map<String, BigDecimal> dailyDepositSumMap = new LinkedHashMap<>();
+
+    // Iterate over the results and add the deposit sum for each day to the map
+    BigDecimal sum = BigDecimal.ZERO;
+    for (Object[] result : results) {
+      String day = Utils.convertDateToString((Date) result[0]);
+      sum = sum.add((BigDecimal) result[1]);
+      dailyDepositSumMap.put(day, sum);
+    }
+
+    return dailyDepositSumMap;
+  }
+
   public GraphPointsDto historyBetweenDates(Timestamp startTimestamp, Timestamp endTimestamp) {
     GraphPointsDto result = new GraphPointsDto();
-    LinkedHashSet<String> daysList = DateUtils.getAllDaysBetweenTimestamps(startTimestamp, endTimestamp);
+    LinkedHashSet<String> daysList = Utils.getAllDaysBetweenTimestamps(startTimestamp, endTimestamp);
     List<String> accounts = bankTransactionRepository.findDistinctAccounts();
 
-    result.setXLabels(daysList);
     for (String account : accounts) {
       Map<String, BigDecimal> points = new HashMap<>();
       List<BankTransaction> bankTransactions = bankTransactionRepository.findByDatetimeBetweenAndAccountOrderByDatetime(startTimestamp, endTimestamp, account);
       for (BankTransaction bankTransaction : bankTransactions) {
-        String simpleDate = DateUtils.convertTimestampToString(bankTransaction.getDatetime());
+        String simpleDate = Utils.convertTimestampToString(bankTransaction.getDatetime());
         points.put(simpleDate, bankTransaction.getCumulativeAmount());
       }
-      result.getLineNames().add(account);
-      DateUtils.fillGaps(daysList, points);
-      result.getData().put(account, points);
+      result.addPoints(account, points);
     }
 
     return result;
@@ -144,7 +156,7 @@ public class BankTransactionService {
     try (CSVReader reader = new CSVReader(new StringReader(csvData))) {
       headers = reader.readNext();
       for (int i = 0; i < headers.length; i++) {
-        if(headers[i].isEmpty())
+        if (headers[i].isEmpty())
           headers[i] = String.valueOf(i);
       }
 
@@ -155,12 +167,12 @@ public class BankTransactionService {
           String value = (i < line.length) ? line[i] : ""; // Handle missing values
           rowData.put(headers[i], value);
         }
-        if(((String)rowData.get("8")).isEmpty())
+        if (((String) rowData.get("8")).isEmpty())
           continue;
 
         BankTransactionDto bankTransactionDto = bankTransactionMapper.toDtoFromDegiro(rowData);
 
-        if(bankTransactionDto.getDescription().equals("Degiro Cash Sweep Transfer"))
+        if (bankTransactionDto.getDescription().equals("Degiro Cash Sweep Transfer"))
           continue;
 
         bankTransactionDtos.add(bankTransactionDto);

@@ -1,6 +1,6 @@
 package com.rondinella.moneymanageapi.controllers;
 
-import com.rondinella.moneymanageapi.common.DateUtils;
+import com.rondinella.moneymanageapi.common.Utils;
 import com.rondinella.moneymanageapi.dtos.GraphPointsDto;
 import com.rondinella.moneymanageapi.services.BrokerTransactionService;
 import lombok.SneakyThrows;
@@ -26,8 +26,8 @@ public class BrokerTransactionsController {
 
   @GetMapping("/worth/graph")
   public GraphPointsDto worthGraph(){
-    Timestamp f = DateUtils.stringToTimestamp("2021-09-01");
-    Timestamp t = DateUtils.todayAsTimestamp();
+    Timestamp f = Utils.stringToTimestamp("2021-06-01");
+    Timestamp t = Utils.todayAsTimestamp();
     return brokerTransactionService.worthGraph(f, t);
   }
 
@@ -45,7 +45,7 @@ public class BrokerTransactionsController {
 
   @GetMapping("/worth/{timestamp}")
   public BigDecimal worthAtDatetime(@PathVariable String timestamp) {
-    return brokerTransactionService.worthAtDatetime(DateUtils.stringToTimestamp(timestamp));
+    return brokerTransactionService.worthAtDatetime(Utils.stringToTimestamp(timestamp));
   }
 
   @PostMapping(value = "/upload", consumes = "text/csv")

@@ -9,14 +9,23 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
-import java.util.stream.Collectors;
 
-public class DateUtils extends org.apache.commons.lang3.time.DateUtils{
+public class Utils extends org.apache.commons.lang3.time.DateUtils {
 
   public static void fillGaps(Set<String> daysList, Map<String, BigDecimal> points) {
-    LinkedHashSet<String> orderedDaysList = new LinkedHashSet<>(daysList);
+    LinkedHashSet<String> orderedDaysList = new LinkedHashSet<>();
+    orderedDaysList.addAll(daysList);
+    orderedDaysList.addAll(points.keySet());
+    sortLinkedHashSet(orderedDaysList);
+    BigDecimal lastDayValue = points.entrySet().stream()
+        .sorted(Map.Entry.comparingByKey())
+        .map(Map.Entry::getValue)
+        .findFirst()
+        .orElse(null);
+    points.put(orderedDaysList.stream().findFirst().orElseThrow(), lastDayValue);
 
-    BigDecimal lastDayValue = null;
+    daysList.forEach(day -> points.putIfAbsent(day, null));
+
     for (String day : orderedDaysList) {
       BigDecimal value = points.get(day);
       if (value != null) {
@@ -27,12 +36,14 @@ public class DateUtils extends org.apache.commons.lang3.time.DateUtils{
     }
   }
 
-  public static LinkedHashSet<String> sortDates(Set<String> dates) {
-    List<String> sortedDates = dates.stream()
+  public static void sortLinkedHashSet(LinkedHashSet<String> linkedHashSet) {
+    List<String> sortedDates = linkedHashSet.stream()
         .sorted()
         .toList();
 
-    return new LinkedHashSet<>(sortedDates);
+    linkedHashSet.clear();
+
+    linkedHashSet.addAll(sortedDates);
   }
 
   public static LinkedHashSet<String> getAllDaysBetweenTimestamps(Timestamp startTimestamp, Timestamp endTimestamp) {
@@ -53,8 +64,8 @@ public class DateUtils extends org.apache.commons.lang3.time.DateUtils{
   }
 
   @SneakyThrows
-  public static Timestamp stringToTimestamp(String string){
-    return Timestamp.from(DateUtils.parseDate(
+  public static Timestamp stringToTimestamp(String string) {
+    return Timestamp.from(Utils.parseDate(
         string,
         "yyyy-MM-dd"
     ).toInstant());
@@ -70,12 +81,12 @@ public class DateUtils extends org.apache.commons.lang3.time.DateUtils{
     return sdf.format(date);
   }
 
-  public static Timestamp todayAsTimestamp(){
+  public static Timestamp todayAsTimestamp() {
     LocalDateTime today = LocalDateTime.now();
     return Timestamp.valueOf(today);
   }
 
-  public static String calendarToString(Calendar calendar){
+  public static String calendarToString(Calendar calendar) {
     return convertDateToString(calendar.getTime());
   }
 }
