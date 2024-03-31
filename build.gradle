@@ -30,6 +30,7 @@ dependencies {
     implementation 'org.springdoc:springdoc-openapi-ui:1.6.11'
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
     implementation 'org.seleniumhq.selenium:selenium-java:4.18.1'
+    implementation 'com.opencsv:opencsv:3.7'
 
     compileOnly 'org.projectlombok:lombok'
     developmentOnly 'org.springframework.boot:spring-boot-docker-compose'

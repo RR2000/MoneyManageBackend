@@ -34,7 +34,7 @@ public class CrumbManager {
     chromeOptions.addArguments("--disable-dev-shm-usage");
     chromeOptions.addArguments("--remote-debugging-port=9222");
     // Define Selenium WebDriver URL
-    String seleniumUrl = "http://selenium:4444/wd/hub";
+    String seleniumUrl = "http://127.0.0.1:4444/wd/hub";
     // Create a new instance of the ChromeDriver with configured options
     WebDriver driver = new RemoteWebDriver(new URL(seleniumUrl), chromeOptions);
 

@@ -2,10 +2,12 @@ package com.rondinella.moneymanageapi.mappers;
 
 import com.rondinella.moneymanageapi.dtos.BankTransactionDto;
 import com.rondinella.moneymanageapi.enitities.BankTransaction;
+import lombok.SneakyThrows;
 import org.mapstruct.Mapper;
 
 import java.math.BigDecimal;
 import java.sql.Timestamp;
+import java.text.SimpleDateFormat;
 import java.util.List;
 import java.util.Map;
 
@@ -32,6 +34,29 @@ public interface BankTransactionMapper {
     dto.setAmount(new BigDecimal((String) rowData.get("Amount")));
     dto.setFee(new BigDecimal((String) rowData.get("Fee")));
     dto.setCurrency((String) rowData.get("Currency"));
+    return dto;
+  }
+
+  @SneakyThrows
+  default BankTransactionDto toDtoFromDegiro(Map<String, Object> rowData) {
+    BankTransactionDto dto = new BankTransactionDto();
+
+    try {
+      dto.setAccount("Degiro");
+
+      String datetimeStr = rowData.get("Data Valore") + " " + rowData.get("Ora");
+      SimpleDateFormat dateFormat = new SimpleDateFormat("dd-MM-yyyy HH:mm");
+      java.util.Date parsedDate = dateFormat.parse(datetimeStr); // This may throw ParseException
+      dto.setDatetime(new Timestamp(parsedDate.getTime()));
+
+      dto.setDescription((String) rowData.get("Descrizione"));
+      dto.setAmount(new BigDecimal((String) rowData.get("8")));
+      dto.setFee(BigDecimal.ZERO);
+      dto.setCurrency("EUR");
+    }catch (Exception e){
+      throw new RuntimeException();
+    }
+
     return dto;
   }
 }
