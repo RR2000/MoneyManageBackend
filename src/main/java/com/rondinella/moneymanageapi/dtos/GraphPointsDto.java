@@ -61,18 +61,31 @@ public class GraphPointsDto implements Serializable {
     graphData.values().forEach(graph -> graph.remove(label));
   }
 
-  public void removeOrphanLabels() {
-    uniqueLabels.retainAll(graphData.values().stream().flatMap(graph -> graph.keySet().stream()).toList());
-  }
-
   public void setLabels(List<String> labels) {
     uniqueLabels.clear();
     uniqueLabels.addAll(labels);
-    removeOrphanLabels();
+  }
+
+  public void removeOrphanLabels() {
+    Set<String> labelsToRemove = new HashSet<>();
+    for (String label : uniqueLabels) {
+      boolean allNull = true;
+      for (String graphName : uniqueGraphNames) {
+        Map<String, BigDecimal> graph = graphData.get(graphName);
+        if (graph != null && graph.containsKey(label) && graph.get(label) != null) {
+          allNull = false;
+          break;
+        }
+      }
+      if (allNull) {
+        labelsToRemove.add(label);
+      }
+    }
+    uniqueLabels.removeAll(labelsToRemove);
   }
 
   public void add(GraphPointsDto otherDto) {
-    for (Map.Entry<String, Map<String, BigDecimal>> entry : otherDto.getGraphData().entrySet()) {
+    for (Map.Entry<String, Map<String, BigDecimal>> entry : otherDto.graphData.entrySet()) {
       String graphName = entry.getKey();
       Map<String, BigDecimal> points = entry.getValue();
 
@@ -91,6 +104,7 @@ public class GraphPointsDto implements Serializable {
   }
 
   public void validateAndFillMissingValues() {
+    removeOrphanLabels();
     for (String graphName : uniqueGraphNames) {
       Map<String, BigDecimal> graph = graphData.get(graphName);
       for (String label : uniqueLabels) {
@@ -119,6 +133,14 @@ public class GraphPointsDto implements Serializable {
 
     // If no non-null value is found in previous labels, return null
     return null;
+  }
+
+  public String getFirstLabel() {
+    return ((TreeSet<String>)uniqueLabels).first();
+  }
+
+  public String getLastLabel() {
+    return ((TreeSet<String>)uniqueLabels).last();
   }
 
   public void addTotalColumn(String totalColumnName, String... graphNames) {

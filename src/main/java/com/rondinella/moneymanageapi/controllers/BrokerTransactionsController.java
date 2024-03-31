@@ -15,7 +15,7 @@ import java.sql.Timestamp;
 
 @RestController
 @CrossOrigin(origins = "http://localhost:4200") // Allow requests from Angular app
-@RequestMapping("/api/brokers/transactions")
+@RequestMapping(path = "/api/brokers/transactions", produces = "application/json")
 public class BrokerTransactionsController {
   final
   BrokerTransactionService brokerTransactionService;
@@ -26,7 +26,7 @@ public class BrokerTransactionsController {
 
   @GetMapping("/worth/graph")
   public GraphPointsDto worthGraph() {
-    Timestamp f = Utils.stringToTimestamp("2021-06-01");
+    Timestamp f = Utils.stringToTimestamp("2021-01-01");
     Timestamp t = Utils.todayAsTimestamp();
     return brokerTransactionService.worthGraph(f, t);
   }
