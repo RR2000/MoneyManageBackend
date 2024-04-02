@@ -7,6 +7,17 @@ import java.io.IOException;
 import java.util.Calendar;
 import java.util.Map;
 
+/*
+* Thinking what i actually need because now its too much
+* I think that i need
+* Last Stock by key
+* List<Stock> by key
+* List<Stock> by key, dates (from - from to)
+* List<Stock> by key, dates, intervals (from interval - from to interval)
+*
+* I think i need just these
+* */
+
 public interface MarketDataConnection {
   ParentStock get(String symbol) throws IOException;
 

@@ -53,8 +53,7 @@ public class BrokerTransactionService {
     List<String> isinList = findAllIsin();
 
     for (String isin : isinList) {
-      String stockTicker = luckySearchTicker(isin);
-      ParentStock parentStock = marketData.get(stockTicker, from, to, interval);
+      ParentStock parentStock = marketData.get(isin, from, to, interval);
       boolean bought = false;
       for (Stock quote : parentStock.getHistory()) {
         String dateString = Utils.convertDateToString(quote.getDatetime());

@@ -17,7 +17,7 @@ public class MoneyManageApiApplication {
   public MoneyManageApiApplication(MarketData marketData, StockRepository stockRepository) {
     //ordered by first chosen
     marketData.addSource(new LocalMarketData(stockRepository));
-    marketData.addSource(new YahooMarketDataConnector());
+    //marketData.addSource(new YahooMarketDataConnector());
     this.marketData = marketData;
   }
 
