@@ -3,9 +3,9 @@ package com.rondinella.moneymanageapi.brokertransactions;
 import com.rondinella.moneymanageapi.banktransactions.BankTransactionService;
 import com.rondinella.moneymanageapi.common.Utils;
 import com.rondinella.moneymanageapi.common.dtos.GraphPointsDto;
-import com.rondinella.moneymanageapi.common.marketdata.HistoricalQuote;
 import com.rondinella.moneymanageapi.common.marketdata.Interval;
-import com.rondinella.moneymanageapi.common.marketdata.Stock;
+import com.rondinella.moneymanageapi.stocks.ParentStock;
+import com.rondinella.moneymanageapi.stocks.Stock;
 import lombok.SneakyThrows;
 import org.springframework.stereotype.Service;
 import yahoofinance.YahooMarketDataConnector;
@@ -13,9 +13,7 @@ import yahoofinance.YahooMarketDataConnector;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.sql.Timestamp;
-import java.util.Calendar;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 @Service
 public class BrokerTransactionService {
@@ -50,10 +48,10 @@ public class BrokerTransactionService {
 
     for (String isin : isinList) {
       String stockTicker = luckySearchTicker(isin);
-      Stock stock = yahooMarketDataConnector.get(stockTicker, from, to, interval);
+      ParentStock parentStock = yahooMarketDataConnector.get(stockTicker, from, to, interval);
       boolean bought = false;
-      for (HistoricalQuote quote : stock.getHistory()) {
-        String dateString = Utils.calendarToString(quote.getDate());
+      for (Stock quote : parentStock.getHistory()) {
+        String dateString = Utils.convertDateToString(quote.getDatetime());
         Timestamp dateTimestamp = Utils.stringToTimestamp(dateString);
         BigDecimal totalQuantity = brokerTransactionRepository.totalQuantityByIsinGreaterThan(isin, dateTimestamp);
         if (quote.getClose() != null && (totalQuantity.compareTo(BigDecimal.ZERO) > 0 || bought)) {
@@ -76,14 +74,14 @@ public class BrokerTransactionService {
   public BigDecimal worthAtDatetime(Timestamp datetime) {
     List<String> isinList = findAllIsin();
     BigDecimal worth = BigDecimal.ZERO;
-    Stock usdEur = luckySearchStock("USD/EUR");
+    ParentStock usdEur = luckySearchStock("USD/EUR");
     for (String isin : isinList) {
       String stockTicker = luckySearchTicker(isin);
-      Stock stock = yahooMarketDataConnector.get(stockTicker, Utils.toCalendar(datetime));
-      BigDecimal thanValue = stock.getHistory().get(0).getClose();
+      ParentStock parentStock = yahooMarketDataConnector.get(stockTicker, Utils.toCalendar(datetime));
+      BigDecimal thanValue = parentStock.getHistory().get(0).getClose();
       BigDecimal isinQuantity = brokerTransactionRepository.totalQuantityByIsinGreaterThan(isin, datetime);
       isinQuantity = isinQuantity == null ? BigDecimal.ZERO : isinQuantity;
-      if (stock.getCurrency().equals("USD"))
+      if (parentStock.getCurrency() == Currency.getInstance("USD"))
         thanValue = thanValue.multiply(usdEur.getClose());
       worth = worth.add(thanValue.multiply(isinQuantity));
     }
@@ -94,12 +92,12 @@ public class BrokerTransactionService {
   public BigDecimal worthRightNow() {
     List<String> isinList = findAllIsin();
     BigDecimal worth = BigDecimal.ZERO;
-    Stock usdEur = luckySearchStock("USD/EUR");
+    ParentStock usdEur = luckySearchStock("USD/EUR");
     for (String isin : isinList) {
-      Stock stock = luckySearchStock(isin);
+      ParentStock parentStock = luckySearchStock(isin);
       BigDecimal isinQuantity = brokerTransactionRepository.totalQuantityByIsin(isin);
-      BigDecimal nowValue = stock.getClose();
-      if (stock.getCurrency().equals("USD"))
+      BigDecimal nowValue = parentStock.getClose();
+      if (parentStock.getCurrency() == Currency.getInstance("USD"))
         nowValue = nowValue.multiply(usdEur.getClose());
       worth = worth.add(nowValue.multiply(isinQuantity));
     }
@@ -111,7 +109,7 @@ public class BrokerTransactionService {
     return yahooMarketDataConnector.luckySearchTicker(query);
   }
 
-  public Stock luckySearchStock(String query) {
+  public ParentStock luckySearchStock(String query) {
     try {
       return yahooMarketDataConnector.get(luckySearchTicker(query));
     } catch (IOException e) {

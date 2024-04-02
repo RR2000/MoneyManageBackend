@@ -1,28 +1,34 @@
-package com.rondinella.moneymanageapi.common.marketdata;
+package com.rondinella.moneymanageapi.stocks;
 
+import jakarta.persistence.Entity;
+import jakarta.persistence.Id;
+import jakarta.persistence.IdClass;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.math.BigDecimal;
-import java.util.Calendar;
+import java.sql.Timestamp;
+import java.util.Currency;
 
 @AllArgsConstructor
 @NoArgsConstructor
 @Setter
 @Getter
-public class HistoricalQuote {
+@Entity
+@IdClass(StockId.class)
+public class Stock {
+  @Id
   private String symbol;
-
-  private Calendar date;
-
+  @Id
+  private String isin;
+  @Id
+  private Timestamp datetime;
   private BigDecimal open;
   private BigDecimal low;
   private BigDecimal high;
   private BigDecimal close;
-
-  private BigDecimal adjClose;
-
+  private Currency currency;
   private Long volume;
 }
