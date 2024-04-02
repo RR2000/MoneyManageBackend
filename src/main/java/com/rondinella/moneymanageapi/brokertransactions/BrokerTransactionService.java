@@ -4,16 +4,19 @@ import com.rondinella.moneymanageapi.banktransactions.BankTransactionService;
 import com.rondinella.moneymanageapi.common.Utils;
 import com.rondinella.moneymanageapi.common.dtos.GraphPointsDto;
 import com.rondinella.moneymanageapi.common.marketdata.Interval;
+import com.rondinella.moneymanageapi.common.marketdata.MarketData;
 import com.rondinella.moneymanageapi.stocks.ParentStock;
 import com.rondinella.moneymanageapi.stocks.Stock;
 import lombok.SneakyThrows;
 import org.springframework.stereotype.Service;
-import yahoofinance.YahooMarketDataConnector;
 
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.sql.Timestamp;
-import java.util.*;
+import java.util.Calendar;
+import java.util.Currency;
+import java.util.List;
+import java.util.Map;
 
 @Service
 public class BrokerTransactionService {
@@ -21,16 +24,19 @@ public class BrokerTransactionService {
     Degiro,
     Sanpaolo
   }
-  YahooMarketDataConnector yahooMarketDataConnector = new YahooMarketDataConnector();
+
+  final
+  MarketData marketData;
   final
   BrokerTransactionRepository brokerTransactionRepository;
   final
   BankTransactionService bankTransactionService;
   BrokerTransactionMapper brokerTransactionMapper = BrokerTransactionMapper.INSTANCE;
 
-  public BrokerTransactionService(BrokerTransactionRepository brokerTransactionRepository, BankTransactionService bankTransactionService) {
+  public BrokerTransactionService(BrokerTransactionRepository brokerTransactionRepository, BankTransactionService bankTransactionService, MarketData marketData) {
     this.brokerTransactionRepository = brokerTransactionRepository;
     this.bankTransactionService = bankTransactionService;
+    this.marketData = marketData;
   }
 
   public List<String> findAllIsin() {
@@ -48,7 +54,7 @@ public class BrokerTransactionService {
 
     for (String isin : isinList) {
       String stockTicker = luckySearchTicker(isin);
-      ParentStock parentStock = yahooMarketDataConnector.get(stockTicker, from, to, interval);
+      ParentStock parentStock = marketData.get(stockTicker, from, to, interval);
       boolean bought = false;
       for (Stock quote : parentStock.getHistory()) {
         String dateString = Utils.convertDateToString(quote.getDatetime());
@@ -77,7 +83,7 @@ public class BrokerTransactionService {
     ParentStock usdEur = luckySearchStock("USD/EUR");
     for (String isin : isinList) {
       String stockTicker = luckySearchTicker(isin);
-      ParentStock parentStock = yahooMarketDataConnector.get(stockTicker, Utils.toCalendar(datetime));
+      ParentStock parentStock = marketData.get(stockTicker, Utils.toCalendar(datetime));
       BigDecimal thanValue = parentStock.getHistory().get(0).getClose();
       BigDecimal isinQuantity = brokerTransactionRepository.totalQuantityByIsinGreaterThan(isin, datetime);
       isinQuantity = isinQuantity == null ? BigDecimal.ZERO : isinQuantity;
@@ -106,12 +112,12 @@ public class BrokerTransactionService {
   }
 
   public String luckySearchTicker(String query) {
-    return yahooMarketDataConnector.luckySearchTicker(query);
+    return marketData.luckySearchTicker(query);
   }
 
   public ParentStock luckySearchStock(String query) {
     try {
-      return yahooMarketDataConnector.get(luckySearchTicker(query));
+      return marketData.get(luckySearchTicker(query));
     } catch (IOException e) {
       return null;
     }
