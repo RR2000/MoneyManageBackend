@@ -124,4 +124,8 @@ public class Utils extends org.apache.commons.lang3.time.DateUtils {
   public static String calendarToString(Calendar calendar) {
     return convertDateToString(calendar.getTime());
   }
+
+  public static Timestamp calendarToTimestamp(Calendar calendar){
+    return Timestamp.from(calendar.getTime().toInstant());
+  }
 }
