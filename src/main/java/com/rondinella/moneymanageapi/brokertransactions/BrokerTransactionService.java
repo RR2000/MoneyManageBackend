@@ -66,7 +66,6 @@ public class BrokerTransactionService {
 
     result.addPoints("Degiro", bankTransactionService.getDailyDepositSum("degiro", fromTimestamp, toTimestamp));
 
-    result.validateAndFillMissingValues();
     result.addTotalColumn("Total Worth", isinList);
 
     return result;

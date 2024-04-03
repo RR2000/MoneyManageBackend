@@ -45,17 +45,19 @@ public class BankTransactionsController {
 
   @GetMapping("graph/{fromTimestamp}/{toTimestamp}")
   public ResponseEntity<?> historyBetweenDatesGraph(
-      @PathVariable @Parameter(example = "2024-03-01 00:00:00.000") Timestamp fromTimestamp,
+      @PathVariable @Parameter(example = "2024-01-01 00:00:00.000") Timestamp fromTimestamp,
       @PathVariable @Parameter(example = "2024-03-31 23:59:59.999") Timestamp toTimestamp) {
+    fromTimestamp = Utils.stringToTimestamp("2024-01-01 00:00:00.000");
     toTimestamp = Utils.todayAsTimestamp();
     return new ResponseEntity<>(bankTransactionService.historyBetweenDates(fromTimestamp, toTimestamp), HttpStatus.OK);
   }
 
   @GetMapping("table/{fromTimestamp}/{toTimestamp}")
   public ResponseEntity<?> historyBetweenDatesTable(
-      @PathVariable @Parameter(example = "2024-03-01 00:00:00.000") Timestamp fromTimestamp,
+      @PathVariable @Parameter(example = "2024-01-01 00:00:00.000") Timestamp fromTimestamp,
       @PathVariable @Parameter(example = "2024-03-31 23:59:59.999") Timestamp toTimestamp,
       @RequestParam String accountName) {
+    fromTimestamp = Utils.stringToTimestamp("2024-01-01 00:00:00.000");
     toTimestamp = Utils.todayAsTimestamp();
     return new ResponseEntity<>(bankTransactionService.historyBetweenDates(fromTimestamp, toTimestamp, accountName), HttpStatus.OK);
   }

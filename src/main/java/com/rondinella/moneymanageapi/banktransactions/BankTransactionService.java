@@ -101,20 +101,26 @@ public class BankTransactionService {
 
   public GraphPointsDto historyBetweenDates(Timestamp startTimestamp, Timestamp endTimestamp) {
     GraphPointsDto result = new GraphPointsDto();
-    LinkedHashSet<String> daysList = Utils.getAllDaysBetweenTimestamps(startTimestamp, endTimestamp);
+    List<String> daysList = Utils.getAllDaysBetweenTimestamps(startTimestamp, endTimestamp);
     List<String> accounts = bankTransactionRepository.findDistinctAccounts();
 
     for (String account : accounts) {
       Map<String, BigDecimal> points = new HashMap<>();
-      List<BankTransaction> bankTransactions = bankTransactionRepository.findByDatetimeBetweenAndAccountOrderByDatetime(startTimestamp, endTimestamp, account);
+      ArrayList<BankTransaction> bankTransactions = new ArrayList<>();
+      bankTransactions.add(bankTransactionRepository.findFirstBeforeStartTimestamp(startTimestamp, account));
+      bankTransactions.addAll(bankTransactionRepository.findByDatetimeBetweenAndAccountOrderByDatetime(startTimestamp, endTimestamp, account));
+      bankTransactions.add(bankTransactionRepository.findFirstAfterEndTimestamp(endTimestamp, account));
       for (BankTransaction bankTransaction : bankTransactions) {
-        String simpleDate = Utils.convertTimestampToString(bankTransaction.getDatetime());
-        points.put(simpleDate, bankTransaction.getCumulativeAmount());
+        if(bankTransaction != null) {
+          String simpleDate = Utils.convertTimestampToString(bankTransaction.getDatetime());
+          points.put(simpleDate, bankTransaction.getCumulativeAmount());
+        }
       }
       result.addPoints(account, points);
     }
 
-    result.validateAndFillMissingValues();
+    result.addTotalColumn("Total cash", accounts);
+    result.SetLabelsAndFillMissingValues(daysList);
     return result;
   }
 

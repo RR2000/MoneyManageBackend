@@ -64,6 +64,7 @@ public class GraphPointsDto implements Serializable {
   public void setLabels(List<String> labels) {
     uniqueLabels.clear();
     uniqueLabels.addAll(labels);
+    validateAndFillMissingValues();
   }
 
   public void removeOrphanLabels() {
@@ -101,6 +102,11 @@ public class GraphPointsDto implements Serializable {
         uniqueLabels.add(pointName);
       }
     }
+  }
+
+  public void SetLabelsAndFillMissingValues(List<String>labels){
+    validateAndFillMissingValues();
+    setLabels(labels);
   }
 
   public void validateAndFillMissingValues() {
@@ -148,6 +154,7 @@ public class GraphPointsDto implements Serializable {
   }
 
   public void addTotalColumn(String totalColumnName, List<String> graphNames) {
+    validateAndFillMissingValues();
     Map<String, BigDecimal> totalColumn = new LinkedHashMap<>();
 
     // Iterate over each label

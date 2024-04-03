@@ -74,8 +74,8 @@ public class Utils extends org.apache.commons.lang3.time.DateUtils {
     linkedHashSet.addAll(sortedDates);
   }
 
-  public static LinkedHashSet<String> getAllDaysBetweenTimestamps(Timestamp startTimestamp, Timestamp endTimestamp) {
-    LinkedHashSet<String> allDays = new LinkedHashSet<>();
+  public static List<String> getAllDaysBetweenTimestamps(Timestamp startTimestamp, Timestamp endTimestamp) {
+    List<String> allDays = new ArrayList<>();
 
     LocalDate startDate = startTimestamp.toLocalDateTime().toLocalDate(); // Convert seconds to days
     LocalDate endDate = endTimestamp.toLocalDateTime().toLocalDate(); // Convert seconds to days
@@ -95,7 +95,8 @@ public class Utils extends org.apache.commons.lang3.time.DateUtils {
   public static Timestamp stringToTimestamp(String string) {
     return Timestamp.from(Utils.parseDate(
         string,
-        "yyyy-MM-dd"
+        "yyyy-MM-dd",
+        "yyyy-MM-dd hh:mm:ss.SSS"
     ).toInstant());
   }
 
