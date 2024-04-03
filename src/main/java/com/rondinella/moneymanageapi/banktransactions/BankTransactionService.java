@@ -4,10 +4,9 @@ import com.opencsv.CSVReader;
 import com.rondinella.moneymanageapi.common.Utils;
 import com.rondinella.moneymanageapi.common.dtos.GraphPointsDto;
 import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
 
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.StringReader;
+import java.io.*;
 import java.math.BigDecimal;
 import java.sql.Timestamp;
 import java.util.*;
@@ -121,7 +120,8 @@ public class BankTransactionService {
     return bankTransactionMapper.toDto(txAdded);
   }
 
-  private List<BankTransactionDto> revolutCsv(String csvData) throws IOException {
+  private List<BankTransactionDto> revolutCsv(MultipartFile file) throws IOException {
+    String csvData = new String(file.getBytes());
     BufferedReader reader = new BufferedReader(new StringReader(csvData));
     List<BankTransactionDto> bankTransactionDtos = new ArrayList<>();
     String line;
@@ -144,7 +144,8 @@ public class BankTransactionService {
     return bankTransactionDtos;
   }
 
-  public List<BankTransactionDto> degiroCsv(String csvData) throws IOException {
+  public List<BankTransactionDto> degiroCsv(MultipartFile file) throws IOException {
+    String csvData = new String(file.getBytes());
     List<BankTransactionDto> bankTransactionDtos = new ArrayList<>();
 
     String[] headers;
@@ -179,16 +180,19 @@ public class BankTransactionService {
     return bankTransactionDtos;
   }
 
+  /*
+  public List<BankTransactionDto> xlsxSanpaolo(File file){
+    FileInputStream is = new FileInputStream(file);
+    Workbook workbook = new XSSFWorkbook(is);
+    return null;
+  }*/
 
-  public List<BankTransactionDto> addTransactionsFromCsv(String csvData, BankName bankName) {
-    if (csvData == null || csvData.isEmpty()) {
-      throw new RuntimeException("CSV data is empty");
-    }
+  public List<BankTransactionDto> addTransactionsFromMultipartFile(MultipartFile file, BankName bankName) {
     try {
       List<BankTransactionDto> bankTransactionDtos;
       switch (bankName) {
-        case Degiro -> bankTransactionDtos = degiroCsv(csvData);
-        case Revolut -> bankTransactionDtos = revolutCsv(csvData);
+        case Degiro -> bankTransactionDtos = degiroCsv(file);
+        case Revolut -> bankTransactionDtos = revolutCsv(file);
         case Sanpaolo -> throw new RuntimeException("Sanpaolo not implemented yet");
         default -> throw new RuntimeException("Impossible to be here");
       }
