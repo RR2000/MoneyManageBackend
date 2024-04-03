@@ -13,10 +13,7 @@ import org.springframework.stereotype.Service;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.sql.Timestamp;
-import java.util.Calendar;
-import java.util.Currency;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 @Service
 public class BrokerTransactionService {
@@ -37,6 +34,19 @@ public class BrokerTransactionService {
     this.brokerTransactionRepository = brokerTransactionRepository;
     this.bankTransactionService = bankTransactionService;
     this.marketData = marketData;
+  }
+
+  public GraphPointsDto netWorthGraph(Timestamp from, Timestamp to) {
+    GraphPointsDto total = this.worthGraph(from, to);
+    GraphPointsDto banks = bankTransactionService.historyBetweenDates(from, to);
+    total.add(banks);
+    List<String> totalLabels = new ArrayList<>();
+    totalLabels.add("Total Worth");
+    totalLabels.add("Total cash");
+
+    total.addTotalColumn("Net Worth", totalLabels);
+
+    return total;
   }
 
   public List<String> findAllIsin() {

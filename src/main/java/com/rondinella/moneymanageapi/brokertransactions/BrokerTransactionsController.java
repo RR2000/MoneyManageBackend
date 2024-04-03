@@ -30,6 +30,13 @@ public class BrokerTransactionsController {
     return brokerTransactionService.worthGraph(f, t);
   }
 
+  @GetMapping("/netWorth/graph")
+  public GraphPointsDto netWorthGraph() {
+    Timestamp f = Utils.stringToTimestamp("2021-01-01");
+    Timestamp t = Utils.todayAsTimestamp();
+    return brokerTransactionService.netWorthGraph(f, t);
+  }
+
   @SneakyThrows
   @GetMapping("/luckySearch/{query}")
   public Stock luckySearch(@PathVariable String query) {

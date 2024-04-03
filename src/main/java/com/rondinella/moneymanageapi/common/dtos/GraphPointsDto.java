@@ -61,6 +61,16 @@ public class GraphPointsDto implements Serializable {
     graphData.values().forEach(graph -> graph.remove(label));
   }
 
+  public void setLabels(List<String> labels, String... strings) {
+    labels.addAll(List.of(strings));
+    setLabels(labels);
+  }
+
+  public void setLabels(String... strings) {
+    List<String> stringArray = List.of(strings);
+    setLabels(stringArray);
+  }
+
   public void setLabels(List<String> labels) {
     uniqueLabels.clear();
     uniqueLabels.addAll(labels);

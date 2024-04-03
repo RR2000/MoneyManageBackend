@@ -3,8 +3,9 @@ package com.rondinella.moneymanageapi.banktransactions;
 import com.opencsv.CSVReader;
 import com.rondinella.moneymanageapi.common.Utils;
 import com.rondinella.moneymanageapi.common.dtos.GraphPointsDto;
-import jakarta.persistence.Id;
-import org.apache.poi.ss.usermodel.*;
+import org.apache.poi.ss.usermodel.Row;
+import org.apache.poi.ss.usermodel.Sheet;
+import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -21,7 +22,8 @@ public class BankTransactionService {
   public enum BankName {
     Degiro,
     Revolut,
-    Sanpaolo
+    Sanpaolo,
+    Adjustment
   }
 
   final
@@ -42,6 +44,37 @@ public class BankTransactionService {
 
   public List<String> findAllAccounts() {
     return bankTransactionRepository.findDistinctAccounts();
+  }
+
+  public List<BankTransactionDto> adjustCumulativeAmount(MultipartFile file) {
+    List<BankTransactionDto> transactions = new ArrayList<>();
+    try {
+      String csvData = new String(file.getBytes());
+      BufferedReader reader = new BufferedReader(new StringReader(csvData));
+      String line;
+      // Read the header line to get field names
+      String[] headers = reader.readLine().split(",");
+      while ((line = reader.readLine()) != null) {
+        String[] data = line.split(",", -1);
+
+        // Create a Map to hold the data of each row
+        Map<String, Object> rowData = new HashMap<>();
+        for (int i = 0; i < headers.length; i++) {
+          rowData.put(headers[i], data[i]);
+        }
+
+        BankTransactionDto bankTransactionDto = new BankTransactionDto();
+        bankTransactionDto.setAccount((String) rowData.get("account"));
+        bankTransactionDto.setDatetime(Utils.stringToTimestamp((String) rowData.get("datetime")));
+        bankTransactionDto.setDescription((String) rowData.get("description"));
+        bankTransactionDto.setCumulativeAmount(new BigDecimal((String) rowData.get("cumulative_amount")));
+        bankTransactionDto.setCurrency((String) rowData.get("currency"));
+        transactions.add(bankTransactionDto);
+      }
+    } catch (IOException e) {
+      throw new RuntimeException(e);
+    }
+    return transactions;
   }
 
   public boolean computeCumulativeAmount(String account, BigDecimal todayMoney) {
@@ -111,7 +144,7 @@ public class BankTransactionService {
       bankTransactions.addAll(bankTransactionRepository.findByDatetimeBetweenAndAccountOrderByDatetime(startTimestamp, endTimestamp, account));
       bankTransactions.add(bankTransactionRepository.findFirstAfterEndTimestamp(endTimestamp, account));
       for (BankTransaction bankTransaction : bankTransactions) {
-        if(bankTransaction != null) {
+        if (bankTransaction != null) {
           String simpleDate = Utils.convertTimestampToString(bankTransaction.getDatetime());
           points.put(simpleDate, bankTransaction.getCumulativeAmount());
         }
@@ -229,6 +262,7 @@ public class BankTransactionService {
     try {
       List<BankTransactionDto> bankTransactionDtos;
       switch (bankName) {
+        case Adjustment -> bankTransactionDtos = adjustCumulativeAmount(file);
         case Degiro -> bankTransactionDtos = degiroCsv(file);
         case Revolut -> bankTransactionDtos = revolutCsv(file);
         case Sanpaolo -> bankTransactionDtos = xlsxSanpaolo(file);
