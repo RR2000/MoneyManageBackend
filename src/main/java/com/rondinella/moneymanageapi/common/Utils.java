@@ -104,6 +104,12 @@ public class Utils extends org.apache.commons.lang3.time.DateUtils {
     return sdf.format(timestamp);
   }
 
+  public static java.sql.Date convertJavaToSqlDate(Date javaDate) {
+    if(javaDate == null)
+      return null;
+    return new java.sql.Date(javaDate.getTime());
+  }
+
   public static String convertDateToString(java.util.Date date) {
     SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
     return sdf.format(date);

@@ -1,6 +1,7 @@
 package com.rondinella.moneymanageapi.banktransactions;
 
 import com.rondinella.moneymanageapi.banktransactions.BankTransactionService.BankName;
+import com.rondinella.moneymanageapi.common.Utils;
 import io.swagger.v3.oas.annotations.Parameter;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -46,6 +47,7 @@ public class BankTransactionsController {
   public ResponseEntity<?> historyBetweenDatesGraph(
       @PathVariable @Parameter(example = "2024-03-01 00:00:00.000") Timestamp fromTimestamp,
       @PathVariable @Parameter(example = "2024-03-31 23:59:59.999") Timestamp toTimestamp) {
+    toTimestamp = Utils.todayAsTimestamp();
     return new ResponseEntity<>(bankTransactionService.historyBetweenDates(fromTimestamp, toTimestamp), HttpStatus.OK);
   }
 
@@ -54,6 +56,7 @@ public class BankTransactionsController {
       @PathVariable @Parameter(example = "2024-03-01 00:00:00.000") Timestamp fromTimestamp,
       @PathVariable @Parameter(example = "2024-03-31 23:59:59.999") Timestamp toTimestamp,
       @RequestParam String accountName) {
+    toTimestamp = Utils.todayAsTimestamp();
     return new ResponseEntity<>(bankTransactionService.historyBetweenDates(fromTimestamp, toTimestamp, accountName), HttpStatus.OK);
   }
 

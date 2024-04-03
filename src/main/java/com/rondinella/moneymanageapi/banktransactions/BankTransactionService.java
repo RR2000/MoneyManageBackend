@@ -3,10 +3,15 @@ package com.rondinella.moneymanageapi.banktransactions;
 import com.opencsv.CSVReader;
 import com.rondinella.moneymanageapi.common.Utils;
 import com.rondinella.moneymanageapi.common.dtos.GraphPointsDto;
+import jakarta.persistence.Id;
+import org.apache.poi.ss.usermodel.*;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.*;
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.StringReader;
 import java.math.BigDecimal;
 import java.sql.Timestamp;
 import java.util.*;
@@ -180,12 +185,39 @@ public class BankTransactionService {
     return bankTransactionDtos;
   }
 
-  /*
-  public List<BankTransactionDto> xlsxSanpaolo(File file){
-    FileInputStream is = new FileInputStream(file);
-    Workbook workbook = new XSSFWorkbook(is);
-    return null;
-  }*/
+
+  public List<BankTransactionDto> xlsxSanpaolo(MultipartFile file) {
+    List<BankTransactionDto> transactions = new ArrayList<>();
+    try (Workbook workbook = new XSSFWorkbook(file.getInputStream())) {
+      Sheet sheet = workbook.getSheetAt(0); // Assuming data is in the first sheet
+      for (int i = 19; i <= sheet.getLastRowNum(); i++) {
+        Row row = sheet.getRow(i);
+        if (row != null && row.getCell(6) != null && !row.getCell(6).getStringCellValue().isEmpty()) {
+          Date data = Utils.convertJavaToSqlDate(row.getCell(0).getDateCellValue());
+          String operazione = row.getCell(1).getStringCellValue();
+          String dettagli = row.getCell(2).getStringCellValue();
+          String conto = row.getCell(3).getStringCellValue();
+          String contabilizzazione = row.getCell(4).getStringCellValue();
+          String categoria = row.getCell(5).getStringCellValue();
+          Currency valuta = Currency.getInstance(row.getCell(6).getStringCellValue());
+          BigDecimal importo = BigDecimal.valueOf(row.getCell(7).getNumericCellValue());
+
+          BankTransactionDto bankTransactionDto = new BankTransactionDto();
+          bankTransactionDto.setAccount(conto.replace(" ", "_").replace("/", "_"));
+          bankTransactionDto.setDatetime(new Timestamp(data.getTime()));
+          bankTransactionDto.setDescription(operazione);
+          bankTransactionDto.setAmount(importo);
+          bankTransactionDto.setFee(BigDecimal.ZERO);
+          bankTransactionDto.setCurrency(valuta.getCurrencyCode());
+
+          transactions.add(bankTransactionDto);
+        }
+      }
+    } catch (IOException e) {
+      e.printStackTrace(); // Handle the exception appropriately
+    }
+    return transactions;
+  }
 
   public List<BankTransactionDto> addTransactionsFromMultipartFile(MultipartFile file, BankName bankName) {
     try {
@@ -193,16 +225,15 @@ public class BankTransactionService {
       switch (bankName) {
         case Degiro -> bankTransactionDtos = degiroCsv(file);
         case Revolut -> bankTransactionDtos = revolutCsv(file);
-        case Sanpaolo -> throw new RuntimeException("Sanpaolo not implemented yet");
+        case Sanpaolo -> bankTransactionDtos = xlsxSanpaolo(file);
         default -> throw new RuntimeException("Impossible to be here");
       }
 
       return addTransactions(bankTransactionDtos);
     } catch (IOException e) {
-      throw new RuntimeException("Failed to read CSV data", e);
+      throw new RuntimeException("Failed to read data", e);
     } catch (Exception e) {
-      // Handle any other exceptions that might occur during processing
-      throw new RuntimeException("Error processing CSV data", e);
+      throw new RuntimeException("Error processing data", e);
     }
   }
 
