@@ -16,6 +16,10 @@ import java.util.Map;
 * List<Stock> by key, dates, intervals (from interval - from to interval)
 *
 * I think i need just these
+*
+* Also need to download just new data I need
+* 
+* Monte Carlo Simulation
 * */
 
 public interface MarketDataConnection {
