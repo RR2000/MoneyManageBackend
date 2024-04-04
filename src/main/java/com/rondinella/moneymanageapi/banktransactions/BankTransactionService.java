@@ -233,7 +233,7 @@ public class BankTransactionService {
         case Degiro -> bankTransactionDtos = degiroCsv(file);
         case Revolut -> bankTransactionDtos = revolutCsv(file);
         case Sanpaolo -> bankTransactionDtos = xlsxSanpaolo(file);
-        case Unicredit -> throw new RuntimeException("Unicredit not yet  implemented");
+        case Unicredit -> throw new RuntimeException("Unicredit not yet implemented");
         default -> throw new RuntimeException("Impossible to be here");
       }
 
