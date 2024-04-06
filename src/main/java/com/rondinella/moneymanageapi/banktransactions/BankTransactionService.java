@@ -226,6 +226,32 @@ public class BankTransactionService {
     return transactions;
   }
 
+
+  //To do: Managment Unicredit CSV, in Development
+  private List<BankTransactionDto> unicreditCsv(MultipartFile file) throws IOException {
+    String csvData = new String(file.getBytes());
+    BufferedReader reader = new BufferedReader(new StringReader(csvData));
+    List<BankTransactionDto> bankTransactionDtos = new ArrayList<>();
+    String line;
+    // Read the header line to get field names
+    String[] headers = reader.readLine().split(";");
+    while ((line = reader.readLine()) != null) {
+      String[] data = line.split(";", -1);
+      if (data.length != headers.length)
+        throw new RuntimeException("lol");
+
+      // Create a Map to hold the data of each row
+      Map<String, Object> rowData = new HashMap<>();
+      for (int i = 0; i < headers.length; i++) {
+        rowData.put(headers[i], data[i]);
+      }
+
+      BankTransactionDto bankTransactionDto = bankTransactionMapper.toDtoFromUnicredit(rowData);
+      bankTransactionDtos.add(bankTransactionDto);
+    }
+    return bankTransactionDtos;
+  }
+
   public List<BankTransactionDto> addTransactionsFromMultipartFile(MultipartFile file, BankName bankName) {
     try {
       List<BankTransactionDto> bankTransactionDtos;
@@ -233,9 +259,10 @@ public class BankTransactionService {
         case Degiro -> bankTransactionDtos = degiroCsv(file);
         case Revolut -> bankTransactionDtos = revolutCsv(file);
         case Sanpaolo -> bankTransactionDtos = xlsxSanpaolo(file);
-        case Unicredit -> throw new RuntimeException("Unicredit not yet implemented");
+        case Unicredit -> bankTransactionDtos = unicreditCsv(file); // In Develop
         default -> throw new RuntimeException("Impossible to be here");
       }
+
 
       return addTransactions(bankTransactionDtos);
     } catch (IOException e) {
