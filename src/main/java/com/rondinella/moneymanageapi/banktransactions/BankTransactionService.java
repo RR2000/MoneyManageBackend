@@ -11,6 +11,7 @@ import java.io.StringReader;
 import java.math.BigDecimal;
 import java.sql.Timestamp;
 import java.util.*;
+import java.util.LinkedHashMap;
 
 @Service
 public class BankTransactionService {
@@ -22,10 +23,13 @@ public class BankTransactionService {
 
   final
   BankTransactionRepository bankTransactionRepository;
+  final
+  DailyBalanceRepository dailyBalanceRepository;
   BankTransactionMapper bankTransactionMapper = BankTransactionMapper.INSTANCE;
 
-  public BankTransactionService(BankTransactionRepository bankTransactionRepository) {
+  public BankTransactionService(BankTransactionRepository bankTransactionRepository, DailyBalanceRepository dailyBalanceRepository) {
     this.bankTransactionRepository = bankTransactionRepository;
+    this.dailyBalanceRepository = dailyBalanceRepository;
   }
 
   public List<BankTransactionDto> findAllTransactions() {
@@ -54,6 +58,17 @@ public class BankTransactionService {
 
     bankTransactionRepository.saveAllAndFlush(bankTransactions);
 
+    // Populate daily balance snapshot table
+    List<BankTransaction> ordered = bankTransactionRepository.findTransactionByAccountOrderByDatetime(account);
+    Map<java.time.LocalDate, BigDecimal> dailyMap = new java.util.LinkedHashMap<>();
+    for (BankTransaction tx : ordered) {
+      java.time.LocalDate day = tx.getDatetime().toLocalDateTime().toLocalDate();
+      dailyMap.put(day, tx.getCumulativeAmount());
+    }
+    List<DailyBalance> snapshots = new ArrayList<>();
+    dailyMap.forEach((date, balance) -> snapshots.add(new DailyBalance(account, date, balance)));
+    dailyBalanceRepository.saveAllAndFlush(snapshots);
+
     return true;
   }
 
@@ -74,6 +89,10 @@ public class BankTransactionService {
     return sum;
   }
 
+
+  public List<DailyBalance> getDailyBalance(String account) {
+    return dailyBalanceRepository.findByAccountOrderByDate(account);
+  }
 
   public List<BankTransactionDto> historyBetweenDates(Timestamp startTimestamp, Timestamp endTimestamp, String account) {
     List<BankTransaction> bankTransactions = bankTransactionRepository.findByDatetimeBetweenAndAccount(startTimestamp, endTimestamp, account);
@@ -97,15 +116,25 @@ public class BankTransactionService {
 
   public GraphPointsDto historyBetweenDates(Timestamp startTimestamp, Timestamp endTimestamp) {
     GraphPointsDto result = new GraphPointsDto();
-    LinkedHashSet<String> daysList = Utils.getAllDaysBetweenTimestamps(startTimestamp, endTimestamp);
     List<String> accounts = bankTransactionRepository.findDistinctAccounts();
 
+    java.time.LocalDate from = startTimestamp.toLocalDateTime().toLocalDate();
+    java.time.LocalDate to = endTimestamp.toLocalDateTime().toLocalDate();
+
     for (String account : accounts) {
-      Map<String, BigDecimal> points = new HashMap<>();
-      List<BankTransaction> bankTransactions = bankTransactionRepository.findByDatetimeBetweenAndAccountOrderByDatetime(startTimestamp, endTimestamp, account);
-      for (BankTransaction bankTransaction : bankTransactions) {
-        String simpleDate = Utils.convertTimestampToString(bankTransaction.getDatetime());
-        points.put(simpleDate, bankTransaction.getCumulativeAmount());
+      List<DailyBalance> snapshots = dailyBalanceRepository.findByAccountAndDateBetweenOrderByDate(account, from, to);
+      Map<String, BigDecimal> points = new LinkedHashMap<>();
+      if (!snapshots.isEmpty()) {
+        for (DailyBalance snapshot : snapshots) {
+          points.put(snapshot.getDate().toString(), snapshot.getBalance());
+        }
+      } else {
+        // Fallback: compute from raw transactions
+        List<BankTransaction> bankTransactions = bankTransactionRepository.findByDatetimeBetweenAndAccountOrderByDatetime(startTimestamp, endTimestamp, account);
+        for (BankTransaction bankTransaction : bankTransactions) {
+          String simpleDate = Utils.convertTimestampToString(bankTransaction.getDatetime());
+          points.put(simpleDate, bankTransaction.getCumulativeAmount());
+        }
       }
       result.addPoints(account, points);
     }
