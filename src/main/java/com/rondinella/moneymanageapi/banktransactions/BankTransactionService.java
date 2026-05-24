@@ -2,10 +2,10 @@ package com.rondinella.moneymanageapi.banktransactions;
 
 import com.opencsv.CSVReader;
 import com.rondinella.moneymanageapi.common.Utils;
+import com.rondinella.moneymanageapi.common.configurations.AccountBaseProperties;
 import com.rondinella.moneymanageapi.common.dtos.GraphPointsDto;
 import org.springframework.stereotype.Service;
 
-import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.StringReader;
 import java.math.BigDecimal;
@@ -22,10 +22,13 @@ public class BankTransactionService {
 
   final
   BankTransactionRepository bankTransactionRepository;
+  final
+  AccountBaseProperties accountBaseProperties;
   BankTransactionMapper bankTransactionMapper = BankTransactionMapper.INSTANCE;
 
-  public BankTransactionService(BankTransactionRepository bankTransactionRepository) {
+  public BankTransactionService(BankTransactionRepository bankTransactionRepository, AccountBaseProperties accountBaseProperties) {
     this.bankTransactionRepository = bankTransactionRepository;
+    this.accountBaseProperties = accountBaseProperties;
   }
 
   public List<BankTransactionDto> findAllTransactions() {
@@ -58,10 +61,7 @@ public class BankTransactionService {
   }
 
   public BigDecimal amountOnThatDay(String accountName, Timestamp thatDay) {
-    Map<String, BigDecimal> base = new HashMap<>();
-    base.put("Revolut_Current", new BigDecimal("94.24"));
-    base.put("Revolut_Pocket", new BigDecimal("79.86"));
-    base.put("Revolut_Savings", new BigDecimal("98.16"));
+    Map<String, BigDecimal> base = accountBaseProperties.getAmounts();
 
     List<BankTransaction> bankTransactions = bankTransactionRepository.findTransactionByAccountAndDatetimeGreaterThanOrderByDatetimeDesc(accountName, thatDay);
 
@@ -122,25 +122,29 @@ public class BankTransactionService {
   }
 
   private List<BankTransactionDto> revolutCsv(String csvData) throws IOException {
-    BufferedReader reader = new BufferedReader(new StringReader(csvData));
     List<BankTransactionDto> bankTransactionDtos = new ArrayList<>();
-    String line;
-    // Read the header line to get field names
-    String[] headers = reader.readLine().split(",");
-    while ((line = reader.readLine()) != null) {
-      String[] data = line.split(",", -1);
-      if (data.length != headers.length)
-        throw new RuntimeException("lol");
 
-      // Create a Map to hold the data of each row
-      Map<String, Object> rowData = new HashMap<>();
-      for (int i = 0; i < headers.length; i++) {
-        rowData.put(headers[i], data[i]);
+    try (CSVReader reader = new CSVReader(new StringReader(csvData))) {
+      String[] headers = reader.readNext();
+      if (headers == null) {
+        return bankTransactionDtos;
       }
 
-      BankTransactionDto bankTransactionDto = bankTransactionMapper.toDtoFromRevolut(rowData);
-      bankTransactionDtos.add(bankTransactionDto);
+      String[] data;
+      while ((data = reader.readNext()) != null) {
+        if (data.length != headers.length)
+          throw new RuntimeException("Revolut CSV row has " + data.length + " columns but header has " + headers.length);
+
+        Map<String, Object> rowData = new HashMap<>();
+        for (int i = 0; i < headers.length; i++) {
+          rowData.put(headers[i], data[i]);
+        }
+
+        BankTransactionDto bankTransactionDto = bankTransactionMapper.toDtoFromRevolut(rowData);
+        bankTransactionDtos.add(bankTransactionDto);
+      }
     }
+
     return bankTransactionDtos;
   }
 
@@ -203,4 +207,3 @@ public class BankTransactionService {
   }
 
 }
-

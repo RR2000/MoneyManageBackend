@@ -11,7 +11,6 @@ import java.sql.Timestamp;
 import java.util.List;
 
 @RestController
-@CrossOrigin(origins = "http://localhost:4200") // Allow requests from Angular app
 @RequestMapping(path = "/api/banks/transactions", produces = "application/json")
 public class BankTransactionsController {
 
@@ -23,7 +22,7 @@ public class BankTransactionsController {
 
   @GetMapping
   public ResponseEntity<?> getAllTransactions() {
-    return new ResponseEntity<>(bankTransactionService.findAllTransactions(), HttpStatus.CREATED);
+    return new ResponseEntity<>(bankTransactionService.findAllTransactions(), HttpStatus.OK);
   }
 
   @GetMapping("/accounts/{accountName}")

@@ -13,7 +13,6 @@ import java.math.BigDecimal;
 import java.sql.Timestamp;
 
 @RestController
-@CrossOrigin(origins = "http://localhost:4200") // Allow requests from Angular app
 @RequestMapping(path = "/api/brokers/transactions", produces = "application/json")
 public class BrokerTransactionsController {
   final
