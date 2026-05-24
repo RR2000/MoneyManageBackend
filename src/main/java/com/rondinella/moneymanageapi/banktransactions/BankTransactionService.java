@@ -2,6 +2,7 @@ package com.rondinella.moneymanageapi.banktransactions;
 
 import com.opencsv.CSVReader;
 import com.rondinella.moneymanageapi.common.Utils;
+import com.rondinella.moneymanageapi.common.configurations.AccountBaseProperties;
 import com.rondinella.moneymanageapi.common.dtos.GraphPointsDto;
 import org.springframework.stereotype.Service;
 
@@ -21,10 +22,13 @@ public class BankTransactionService {
 
   final
   BankTransactionRepository bankTransactionRepository;
+  final
+  AccountBaseProperties accountBaseProperties;
   BankTransactionMapper bankTransactionMapper = BankTransactionMapper.INSTANCE;
 
-  public BankTransactionService(BankTransactionRepository bankTransactionRepository) {
+  public BankTransactionService(BankTransactionRepository bankTransactionRepository, AccountBaseProperties accountBaseProperties) {
     this.bankTransactionRepository = bankTransactionRepository;
+    this.accountBaseProperties = accountBaseProperties;
   }
 
   public List<BankTransactionDto> findAllTransactions() {
@@ -57,10 +61,7 @@ public class BankTransactionService {
   }
 
   public BigDecimal amountOnThatDay(String accountName, Timestamp thatDay) {
-    Map<String, BigDecimal> base = new HashMap<>();
-    base.put("Revolut_Current", new BigDecimal("94.24"));
-    base.put("Revolut_Pocket", new BigDecimal("79.86"));
-    base.put("Revolut_Savings", new BigDecimal("98.16"));
+    Map<String, BigDecimal> base = accountBaseProperties.getAmounts();
 
     List<BankTransaction> bankTransactions = bankTransactionRepository.findTransactionByAccountAndDatetimeGreaterThanOrderByDatetimeDesc(accountName, thatDay);
 
@@ -142,8 +143,6 @@ public class BankTransactionService {
         BankTransactionDto bankTransactionDto = bankTransactionMapper.toDtoFromRevolut(rowData);
         bankTransactionDtos.add(bankTransactionDto);
       }
-    } catch (com.opencsv.exceptions.CsvValidationException e) {
-      throw new RuntimeException("Failed to parse Revolut CSV data", e);
     }
 
     return bankTransactionDtos;
@@ -179,8 +178,6 @@ public class BankTransactionService {
 
         bankTransactionDtos.add(bankTransactionDto);
       }
-    } catch (com.opencsv.exceptions.CsvValidationException e) {
-      throw new RuntimeException("Failed to parse Degiro CSV data", e);
     }
 
     return bankTransactionDtos;
