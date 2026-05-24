@@ -4,6 +4,7 @@ import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.security.Keys;
+import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
@@ -16,11 +17,23 @@ import java.util.function.Function;
 @Service
 public class JwtService {
 
-  @Value("${app.jwt.secret:change-me-money-manage-jwt-secret-please-override-0123456789}")
+  @Value("${app.jwt.secret:}")
   private String secretKey;
 
   @Value("${app.jwt.expiration:86400000}")
   private long jwtExpiration;
+
+  private Key signingKey;
+
+  @PostConstruct
+  void init() {
+    if (secretKey != null && !secretKey.isBlank()) {
+      this.signingKey = Keys.hmacShaKeyFor(secretKey.getBytes(StandardCharsets.UTF_8));
+    } else {
+      // No secret configured: generate a secure random key for this run.
+      this.signingKey = Keys.secretKeyFor(SignatureAlgorithm.HS256);
+    }
+  }
 
   public String extractUsername(String token) {
     return extractClaim(token, Claims::getSubject);
@@ -36,7 +49,7 @@ public class JwtService {
         .setSubject(username)
         .setIssuedAt(new Date(System.currentTimeMillis()))
         .setExpiration(new Date(System.currentTimeMillis() + jwtExpiration))
-        .signWith(getSignInKey(), SignatureAlgorithm.HS256)
+        .signWith(signingKey, SignatureAlgorithm.HS256)
         .compact();
   }
 
@@ -51,13 +64,9 @@ public class JwtService {
 
   private Claims extractAllClaims(String token) {
     return Jwts.parserBuilder()
-        .setSigningKey(getSignInKey())
+        .setSigningKey(signingKey)
         .build()
         .parseClaimsJws(token)
         .getBody();
-  }
-
-  private Key getSignInKey() {
-    return Keys.hmacShaKeyFor(secretKey.getBytes(StandardCharsets.UTF_8));
   }
 }
