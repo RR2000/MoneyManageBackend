@@ -13,7 +13,6 @@ import java.sql.Timestamp;
 import java.util.List;
 
 @RestController
-@CrossOrigin(origins = "http://localhost:4200") // Allow requests from Angular app
 @RequestMapping(path = "/api/banks/transactions", produces = "application/json")
 public class BankTransactionsController {
 
@@ -25,7 +24,7 @@ public class BankTransactionsController {
 
   @GetMapping
   public ResponseEntity<?> getAllTransactions() {
-    return new ResponseEntity<>(bankTransactionService.findAllTransactions(), HttpStatus.CREATED);
+    return new ResponseEntity<>(bankTransactionService.findAllTransactions(), HttpStatus.OK);
   }
 
   @GetMapping("/accounts/{accountName}")
@@ -74,6 +73,11 @@ public class BankTransactionsController {
 
   @PostMapping(value = "/{bankName}/upload", consumes = "multipart/form-data")
   public ResponseEntity<?> uploadTransactions(@RequestParam MultipartFile multipartFile, @PathVariable BankName bankName) {
-      return ResponseEntity.status(HttpStatus.CREATED).body(bankTransactionService.addTransactionsFromMultipartFile(multipartFile, bankName));
+    return ResponseEntity.status(HttpStatus.CREATED).body(bankTransactionService.addTransactionsFromMultipartFile(multipartFile, bankName));
+  }
+
+  @GetMapping("/daily-balance/{accountName}")
+  public ResponseEntity<?> getDailyBalance(@PathVariable String accountName) {
+    return ResponseEntity.ok(bankTransactionService.getDailyBalance(accountName));
   }
 }
