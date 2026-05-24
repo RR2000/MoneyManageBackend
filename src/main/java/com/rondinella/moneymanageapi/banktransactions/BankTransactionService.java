@@ -5,7 +5,6 @@ import com.rondinella.moneymanageapi.common.Utils;
 import com.rondinella.moneymanageapi.common.dtos.GraphPointsDto;
 import org.springframework.stereotype.Service;
 
-import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.StringReader;
 import java.math.BigDecimal;
@@ -122,25 +121,31 @@ public class BankTransactionService {
   }
 
   private List<BankTransactionDto> revolutCsv(String csvData) throws IOException {
-    BufferedReader reader = new BufferedReader(new StringReader(csvData));
     List<BankTransactionDto> bankTransactionDtos = new ArrayList<>();
-    String line;
-    // Read the header line to get field names
-    String[] headers = reader.readLine().split(",");
-    while ((line = reader.readLine()) != null) {
-      String[] data = line.split(",", -1);
-      if (data.length != headers.length)
-        throw new RuntimeException("lol");
 
-      // Create a Map to hold the data of each row
-      Map<String, Object> rowData = new HashMap<>();
-      for (int i = 0; i < headers.length; i++) {
-        rowData.put(headers[i], data[i]);
+    try (CSVReader reader = new CSVReader(new StringReader(csvData))) {
+      String[] headers = reader.readNext();
+      if (headers == null) {
+        return bankTransactionDtos;
       }
 
-      BankTransactionDto bankTransactionDto = bankTransactionMapper.toDtoFromRevolut(rowData);
-      bankTransactionDtos.add(bankTransactionDto);
+      String[] data;
+      while ((data = reader.readNext()) != null) {
+        if (data.length != headers.length)
+          throw new RuntimeException("Revolut CSV row has " + data.length + " columns but header has " + headers.length);
+
+        Map<String, Object> rowData = new HashMap<>();
+        for (int i = 0; i < headers.length; i++) {
+          rowData.put(headers[i], data[i]);
+        }
+
+        BankTransactionDto bankTransactionDto = bankTransactionMapper.toDtoFromRevolut(rowData);
+        bankTransactionDtos.add(bankTransactionDto);
+      }
+    } catch (com.opencsv.exceptions.CsvValidationException e) {
+      throw new RuntimeException("Failed to parse Revolut CSV data", e);
     }
+
     return bankTransactionDtos;
   }
 
@@ -174,6 +179,8 @@ public class BankTransactionService {
 
         bankTransactionDtos.add(bankTransactionDto);
       }
+    } catch (com.opencsv.exceptions.CsvValidationException e) {
+      throw new RuntimeException("Failed to parse Degiro CSV data", e);
     }
 
     return bankTransactionDtos;
@@ -203,4 +210,3 @@ public class BankTransactionService {
   }
 
 }
-
