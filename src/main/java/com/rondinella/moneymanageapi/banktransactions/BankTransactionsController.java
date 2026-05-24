@@ -23,7 +23,7 @@ public class BankTransactionsController {
 
   @GetMapping
   public ResponseEntity<?> getAllTransactions() {
-    return new ResponseEntity<>(bankTransactionService.findAllTransactions(), HttpStatus.CREATED);
+    return new ResponseEntity<>(bankTransactionService.findAllTransactions(), HttpStatus.OK);
   }
 
   @GetMapping("/accounts/{accountName}")
