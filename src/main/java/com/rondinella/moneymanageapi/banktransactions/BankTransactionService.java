@@ -10,6 +10,7 @@ import java.io.IOException;
 import java.io.StringReader;
 import java.math.BigDecimal;
 import java.sql.Timestamp;
+import java.time.LocalDate;
 import java.util.*;
 
 @Service
@@ -20,14 +21,16 @@ public class BankTransactionService {
     Sanpaolo
   }
 
-  final
-  BankTransactionRepository bankTransactionRepository;
-  final
-  AccountBaseProperties accountBaseProperties;
+  final BankTransactionRepository bankTransactionRepository;
+  final DailyBalanceRepository dailyBalanceRepository;
+  final AccountBaseProperties accountBaseProperties;
   BankTransactionMapper bankTransactionMapper = BankTransactionMapper.INSTANCE;
 
-  public BankTransactionService(BankTransactionRepository bankTransactionRepository, AccountBaseProperties accountBaseProperties) {
+  public BankTransactionService(BankTransactionRepository bankTransactionRepository,
+                                DailyBalanceRepository dailyBalanceRepository,
+                                AccountBaseProperties accountBaseProperties) {
     this.bankTransactionRepository = bankTransactionRepository;
+    this.dailyBalanceRepository = dailyBalanceRepository;
     this.accountBaseProperties = accountBaseProperties;
   }
 
@@ -46,34 +49,44 @@ public class BankTransactionService {
   public boolean computeCumulativeAmount(String account, BigDecimal todayMoney) {
     List<BankTransaction> bankTransactions = bankTransactionRepository.findTransactionByAccountOrderByDatetimeDesc(account);
 
-    BigDecimal cumulative = todayMoney; // Initialize with today's money
+    BigDecimal cumulative = todayMoney;
     bankTransactions.get(0).setCumulativeAmount(cumulative);
     for (int i = 1; i < bankTransactions.size(); i++) {
       BankTransaction previous = bankTransactions.get(i - 1);
       BankTransaction bankTransaction = bankTransactions.get(i);
-      cumulative = cumulative.subtract(previous.getAmount()); // Add current transaction's amount
-      bankTransaction.setCumulativeAmount(cumulative); // Set cumulative amount for the transaction
+      cumulative = cumulative.subtract(previous.getAmount());
+      bankTransaction.setCumulativeAmount(cumulative);
     }
 
     bankTransactionRepository.saveAllAndFlush(bankTransactions);
+
+    // Populate daily balance snapshot table
+    List<BankTransaction> ordered = bankTransactionRepository.findTransactionByAccountOrderByDatetime(account);
+    Map<LocalDate, BigDecimal> dailyMap = new LinkedHashMap<>();
+    for (BankTransaction tx : ordered) {
+      LocalDate day = tx.getDatetime().toLocalDateTime().toLocalDate();
+      dailyMap.put(day, tx.getCumulativeAmount());
+    }
+    List<DailyBalance> snapshots = new ArrayList<>();
+    dailyMap.forEach((date, balance) -> snapshots.add(new DailyBalance(account, date, balance)));
+    dailyBalanceRepository.saveAllAndFlush(snapshots);
 
     return true;
   }
 
   public BigDecimal amountOnThatDay(String accountName, Timestamp thatDay) {
     Map<String, BigDecimal> base = accountBaseProperties.getAmounts();
-
     List<BankTransaction> bankTransactions = bankTransactionRepository.findTransactionByAccountAndDatetimeGreaterThanOrderByDatetimeDesc(accountName, thatDay);
-
     BigDecimal sum = base.get(accountName);
-
     for (BankTransaction bankTransaction : bankTransactions) {
       sum = sum.subtract(bankTransaction.getAmount()).subtract(bankTransaction.getFee());
     }
-
     return sum;
   }
 
+  public List<DailyBalance> getDailyBalance(String account) {
+    return dailyBalanceRepository.findByAccountOrderByDate(account);
+  }
 
   public List<BankTransactionDto> historyBetweenDates(Timestamp startTimestamp, Timestamp endTimestamp, String account) {
     List<BankTransaction> bankTransactions = bankTransactionRepository.findByDatetimeBetweenAndAccount(startTimestamp, endTimestamp, account);
@@ -83,29 +96,36 @@ public class BankTransactionService {
   public Map<String, BigDecimal> getDailyDepositSum(String account, Timestamp startTimestamp, Timestamp endTimestamp) {
     List<Object[]> results = bankTransactionRepository.findDailyDepositSumByAccountAndDateRange(account, startTimestamp, endTimestamp);
     Map<String, BigDecimal> dailyDepositSumMap = new LinkedHashMap<>();
-
-    // Iterate over the results and add the deposit sum for each day to the map
     BigDecimal sum = BigDecimal.ZERO;
     for (Object[] result : results) {
-      String day = Utils.convertDateToString((Date) result[0]);
+      String day = Utils.convertDateToString((java.util.Date) result[0]);
       sum = sum.add((BigDecimal) result[1]);
       dailyDepositSumMap.put(day, sum);
     }
-
     return dailyDepositSumMap;
   }
 
   public GraphPointsDto historyBetweenDates(Timestamp startTimestamp, Timestamp endTimestamp) {
     GraphPointsDto result = new GraphPointsDto();
-    LinkedHashSet<String> daysList = Utils.getAllDaysBetweenTimestamps(startTimestamp, endTimestamp);
     List<String> accounts = bankTransactionRepository.findDistinctAccounts();
 
+    LocalDate from = startTimestamp.toLocalDateTime().toLocalDate();
+    LocalDate to = endTimestamp.toLocalDateTime().toLocalDate();
+
     for (String account : accounts) {
-      Map<String, BigDecimal> points = new HashMap<>();
-      List<BankTransaction> bankTransactions = bankTransactionRepository.findByDatetimeBetweenAndAccountOrderByDatetime(startTimestamp, endTimestamp, account);
-      for (BankTransaction bankTransaction : bankTransactions) {
-        String simpleDate = Utils.convertTimestampToString(bankTransaction.getDatetime());
-        points.put(simpleDate, bankTransaction.getCumulativeAmount());
+      List<DailyBalance> snapshots = dailyBalanceRepository.findByAccountAndDateBetweenOrderByDate(account, from, to);
+      Map<String, BigDecimal> points = new LinkedHashMap<>();
+      if (!snapshots.isEmpty()) {
+        for (DailyBalance snapshot : snapshots) {
+          points.put(snapshot.getDate().toString(), snapshot.getBalance());
+        }
+      } else {
+        // Fallback: compute from raw transactions
+        List<BankTransaction> bankTransactions = bankTransactionRepository.findByDatetimeBetweenAndAccountOrderByDatetime(startTimestamp, endTimestamp, account);
+        for (BankTransaction bankTransaction : bankTransactions) {
+          String simpleDate = Utils.convertTimestampToString(bankTransaction.getDatetime());
+          points.put(simpleDate, bankTransaction.getCumulativeAmount());
+        }
       }
       result.addPoints(account, points);
     }
@@ -123,66 +143,51 @@ public class BankTransactionService {
 
   private List<BankTransactionDto> revolutCsv(String csvData) throws IOException {
     List<BankTransactionDto> bankTransactionDtos = new ArrayList<>();
-
     try (CSVReader reader = new CSVReader(new StringReader(csvData))) {
       String[] headers = reader.readNext();
       if (headers == null) {
         return bankTransactionDtos;
       }
-
       String[] data;
       while ((data = reader.readNext()) != null) {
         if (data.length != headers.length)
           throw new RuntimeException("Revolut CSV row has " + data.length + " columns but header has " + headers.length);
-
         Map<String, Object> rowData = new HashMap<>();
         for (int i = 0; i < headers.length; i++) {
           rowData.put(headers[i], data[i]);
         }
-
         BankTransactionDto bankTransactionDto = bankTransactionMapper.toDtoFromRevolut(rowData);
         bankTransactionDtos.add(bankTransactionDto);
       }
     }
-
     return bankTransactionDtos;
   }
 
   public List<BankTransactionDto> degiroCsv(String csvData) throws IOException {
     List<BankTransactionDto> bankTransactionDtos = new ArrayList<>();
-
-    String[] headers;
-    Map<String, Object> rowData;
-
     try (CSVReader reader = new CSVReader(new StringReader(csvData))) {
-      headers = reader.readNext();
+      String[] headers = reader.readNext();
       for (int i = 0; i < headers.length; i++) {
         if (headers[i].isEmpty())
           headers[i] = String.valueOf(i);
       }
-
       String[] line;
       while ((line = reader.readNext()) != null) {
-        rowData = new HashMap<>();
+        Map<String, Object> rowData = new HashMap<>();
         for (int i = 0; i < headers.length; i++) {
-          String value = (i < line.length) ? line[i] : ""; // Handle missing values
+          String value = (i < line.length) ? line[i] : "";
           rowData.put(headers[i], value);
         }
         if (((String) rowData.get("8")).isEmpty())
           continue;
-
         BankTransactionDto bankTransactionDto = bankTransactionMapper.toDtoFromDegiro(rowData);
-
         if (bankTransactionDto.getDescription().equals("Degiro Cash Sweep Transfer"))
           continue;
-
         bankTransactionDtos.add(bankTransactionDto);
       }
     }
-
     return bankTransactionDtos;
   }
-
 
   public List<BankTransactionDto> addTransactionsFromCsv(String csvData, BankName bankName) {
     if (csvData == null || csvData.isEmpty()) {
@@ -196,14 +201,11 @@ public class BankTransactionService {
         case Sanpaolo -> throw new RuntimeException("Sanpaolo not implemented yet");
         default -> throw new RuntimeException("Impossible to be here");
       }
-
       return addTransactions(bankTransactionDtos);
     } catch (IOException e) {
       throw new RuntimeException("Failed to read CSV data", e);
     } catch (Exception e) {
-      // Handle any other exceptions that might occur during processing
       throw new RuntimeException("Error processing CSV data", e);
     }
   }
-
 }

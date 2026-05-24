@@ -69,4 +69,9 @@ public class BankTransactionsController {
   public ResponseEntity<?> uploadTransactions(@RequestBody String csvData, @PathVariable BankName bankName) {
     return ResponseEntity.status(HttpStatus.CREATED).body(bankTransactionService.addTransactionsFromCsv(csvData, bankName));
   }
+
+  @GetMapping("/daily-balance/{accountName}")
+  public ResponseEntity<?> getDailyBalance(@PathVariable String accountName) {
+    return ResponseEntity.ok(bankTransactionService.getDailyBalance(accountName));
+  }
 }
