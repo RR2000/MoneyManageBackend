@@ -13,6 +13,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.UUID;
 import java.util.regex.Pattern;
 
 @Service
@@ -47,24 +48,38 @@ public class AuthService {
     if (request.getPassword() == null || request.getPassword().length() < MIN_PASSWORD) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Password: at least " + MIN_PASSWORD + " characters");
     }
+    // BCrypt uses at most 72 bytes
+    if (request.getPassword().getBytes(java.nio.charset.StandardCharsets.UTF_8).length > 72) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Password: at most 72 bytes");
+    }
     if (userRepository.findByUsername(username).isPresent()) {
       throw new ResponseStatusException(HttpStatus.CONFLICT, "Username already taken");
     }
-    User user = new User();
-    user.setUsername(username);
-    user.setPassword(passwordEncoder.encode(request.getPassword()));
-    user.setRole("USER");
-    user = userRepository.save(user);
-
-    String schema = TenantContext.schemaOf(user.getId());
-    tenantSchemas.migrate(schema);
+    User user = createAccount(username, request.getPassword(), null);
     if (request.isSampleData()) {
-      TenantContext.runAs(schema, () -> {
+      TenantContext.runAs(TenantContext.schemaOf(user.getId()), () -> {
         sampleData.load();
         return null;
       });
     }
     return new AuthResponse(jwtService.generateToken(user.getUsername()));
+  }
+
+  /** A new account with its own (empty) schema. Without a password (GitHub accounts) nobody can log in with one. */
+  public User createAccount(String username, String password, String email) {
+    User user = new User();
+    user.setUsername(username);
+    user.setPassword(passwordEncoder.encode(password != null ? password : UUID.randomUUID().toString()));
+    user.setRole("USER");
+    user.setEmail(email);
+    user = userRepository.save(user);
+    tenantSchemas.migrate(TenantContext.schemaOf(user.getId()));
+    return user;
+  }
+
+  /** Token for an account that already proved who it is (GitHub). */
+  public String tokenFor(String username) {
+    return jwtService.generateToken(username);
   }
 
   public AuthResponse login(LoginRequest request) {

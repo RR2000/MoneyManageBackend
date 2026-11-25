@@ -55,6 +55,7 @@ class MoneyManageApiTests {
   void apiNeedsLogin() throws Exception {
     mvc.perform(get("/api/banks/transactions/accounts")).andExpect(status().isUnauthorized());
     mvc.perform(get("/actuator/health")).andExpect(status().isOk());
+    mvc.perform(get("/api/auth/providers")).andExpect(jsonPath("$.github").value(false));
   }
 
   @Test
@@ -69,6 +70,9 @@ class MoneyManageApiTests {
         .andExpect(status().isBadRequest());
     mvc.perform(post("/api/auth/register").contentType(MediaType.APPLICATION_JSON)
             .content("{\"username\":\"" + user() + "\",\"password\":\"short\"}"))
+        .andExpect(status().isBadRequest());
+    mvc.perform(post("/api/auth/register").contentType(MediaType.APPLICATION_JSON)
+            .content("{\"username\":\"" + user() + "\",\"password\":\"" + "x".repeat(80) + "\"}"))
         .andExpect(status().isBadRequest());
     mvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
             .content("{\"username\":\"" + name + "\",\"password\":\"password123\"}"))
@@ -104,9 +108,15 @@ class MoneyManageApiTests {
     mvc.perform(get("/api/brokers/transactions/worth/graph").header("Authorization", auth))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.uniqueGraphNames", hasItems(SampleData.ETF_ISIN, "Total Worth")));
-    mvc.perform(get("/api/montecarlo").param("years", "2").param("simulations", "500").header("Authorization", auth))
+    String mc = mvc.perform(get("/api/montecarlo").param("years", "2").param("simulations", "500").header("Authorization", auth))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.uniqueGraphNames", contains("P25", "P5", "P50", "P75", "P95")));
+        .andExpect(jsonPath("$.uniqueGraphNames", contains("P25", "P5", "P50", "P75", "P95")))
+        .andReturn().getResponse().getContentAsString();
+    // market returns only (monthly purchases excluded): the median stays in a sane range over two years
+    var p50 = JsonMapper.builder().build().readTree(mc).get("graphData").get("P50").properties().stream()
+        .map(e -> e.getValue().doubleValue()).toList();
+    double growth = p50.getLast() / p50.getFirst();
+    org.junit.jupiter.api.Assertions.assertTrue(growth > 0.7 && growth < 1.6, "P50 growth over 2 years: " + growth);
     mvc.perform(get("/api/realestate").header("Authorization", auth))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$", hasSize(1)));

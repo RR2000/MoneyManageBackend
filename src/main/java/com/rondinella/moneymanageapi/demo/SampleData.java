@@ -53,7 +53,8 @@ public class SampleData {
     LocalDate today = LocalDate.now();
     Random rng = new Random(2024);
     bankMovements(today, rng);
-    etf(today, rng);
+    // own seed: the price path does not depend on how many bank movements came before (a calm, rising one)
+    etf(today, new Random(3));
     realEstate();
   }
 
