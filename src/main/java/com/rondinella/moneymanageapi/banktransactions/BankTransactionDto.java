@@ -14,11 +14,11 @@ import java.sql.Timestamp;
 @AllArgsConstructor
 @NoArgsConstructor
 public class BankTransactionDto implements Serializable {
-  String account = null;
-  Timestamp datetime = null;
-  String description = null;
-  BigDecimal amount = null;
-  BigDecimal fee = null;
-  String currency = null;
-  BigDecimal cumulativeAmount = null;
+  private String account = null;
+  private Timestamp datetime = null;
+  private String description = null;
+  private BigDecimal amount = null;
+  private BigDecimal fee = null;
+  private String currency = null;
+  private BigDecimal cumulativeAmount = null;
 }

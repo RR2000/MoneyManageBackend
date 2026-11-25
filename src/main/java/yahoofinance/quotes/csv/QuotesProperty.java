@@ -85,7 +85,7 @@ public enum QuotesProperty {
     SharesOwned("s1"), // Shares Owned
     SharesOutstanding("j2"), // Shares Outstanding
     ShortRatio("s7"), // Short Ratio
-    StockExchange("x"), // Stock Exchange
+    StockExchange("x"), // ParentStock Exchange
     Symbol("s"), // Symbol
     TickerTrend("t7"), // Ticker Trend
     TradeDate("d2"), // Trade Date

@@ -4,7 +4,10 @@ import com.opencsv.CSVReader;
 import com.rondinella.moneymanageapi.common.Utils;
 import com.rondinella.moneymanageapi.common.configurations.AccountBaseProperties;
 import com.rondinella.moneymanageapi.common.dtos.GraphPointsDto;
+import org.apache.poi.ss.usermodel.*;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.io.StringReader;
@@ -18,7 +21,8 @@ public class BankTransactionService {
   public enum BankName {
     Degiro,
     Revolut,
-    Sanpaolo
+    Sanpaolo,
+    Unicredit
   }
 
   final BankTransactionRepository bankTransactionRepository;
@@ -107,6 +111,7 @@ public class BankTransactionService {
 
   public GraphPointsDto historyBetweenDates(Timestamp startTimestamp, Timestamp endTimestamp) {
     GraphPointsDto result = new GraphPointsDto();
+    List<String> daysList = Utils.getAllDaysBetweenTimestamps(startTimestamp, endTimestamp);
     List<String> accounts = bankTransactionRepository.findDistinctAccounts();
 
     LocalDate from = startTimestamp.toLocalDateTime().toLocalDate();
@@ -130,7 +135,8 @@ public class BankTransactionService {
       result.addPoints(account, points);
     }
 
-    result.validateAndFillMissingValues();
+    result.addTotalColumn("Total cash", accounts);
+    result.SetLabelsAndFillMissingValues(daysList);
     return result;
   }
 
@@ -141,71 +147,106 @@ public class BankTransactionService {
     return bankTransactionMapper.toDto(txAdded);
   }
 
-  private List<BankTransactionDto> revolutCsv(String csvData) throws IOException {
+  private List<BankTransactionDto> revolutCsv(MultipartFile file) throws IOException {
+    String csvData = new String(file.getBytes());
     List<BankTransactionDto> bankTransactionDtos = new ArrayList<>();
     try (CSVReader reader = new CSVReader(new StringReader(csvData))) {
       String[] headers = reader.readNext();
-      if (headers == null) {
-        return bankTransactionDtos;
-      }
+      if (headers == null) return bankTransactionDtos;
       String[] data;
       while ((data = reader.readNext()) != null) {
         if (data.length != headers.length)
           throw new RuntimeException("Revolut CSV row has " + data.length + " columns but header has " + headers.length);
         Map<String, Object> rowData = new HashMap<>();
-        for (int i = 0; i < headers.length; i++) {
-          rowData.put(headers[i], data[i]);
-        }
-        BankTransactionDto bankTransactionDto = bankTransactionMapper.toDtoFromRevolut(rowData);
-        bankTransactionDtos.add(bankTransactionDto);
+        for (int i = 0; i < headers.length; i++) rowData.put(headers[i], data[i]);
+        bankTransactionDtos.add(bankTransactionMapper.toDtoFromRevolut(rowData));
       }
     }
     return bankTransactionDtos;
   }
 
-  public List<BankTransactionDto> degiroCsv(String csvData) throws IOException {
+  public List<BankTransactionDto> degiroCsv(MultipartFile file) throws IOException {
+    String csvData = new String(file.getBytes());
     List<BankTransactionDto> bankTransactionDtos = new ArrayList<>();
     try (CSVReader reader = new CSVReader(new StringReader(csvData))) {
       String[] headers = reader.readNext();
       for (int i = 0; i < headers.length; i++) {
-        if (headers[i].isEmpty())
-          headers[i] = String.valueOf(i);
+        if (headers[i].isEmpty()) headers[i] = String.valueOf(i);
       }
       String[] line;
       while ((line = reader.readNext()) != null) {
         Map<String, Object> rowData = new HashMap<>();
         for (int i = 0; i < headers.length; i++) {
-          String value = (i < line.length) ? line[i] : "";
-          rowData.put(headers[i], value);
+          rowData.put(headers[i], (i < line.length) ? line[i] : "");
         }
-        if (((String) rowData.get("8")).isEmpty())
-          continue;
-        BankTransactionDto bankTransactionDto = bankTransactionMapper.toDtoFromDegiro(rowData);
-        if (bankTransactionDto.getDescription().equals("Degiro Cash Sweep Transfer"))
-          continue;
-        bankTransactionDtos.add(bankTransactionDto);
+        if (((String) rowData.get("8")).isEmpty()) continue;
+        BankTransactionDto dto = bankTransactionMapper.toDtoFromDegiro(rowData);
+        if (dto.getDescription().equals("Degiro Cash Sweep Transfer")) continue;
+        bankTransactionDtos.add(dto);
       }
     }
     return bankTransactionDtos;
   }
 
-  public List<BankTransactionDto> addTransactionsFromCsv(String csvData, BankName bankName) {
-    if (csvData == null || csvData.isEmpty()) {
-      throw new RuntimeException("CSV data is empty");
+  public List<BankTransactionDto> xlsxSanpaolo(MultipartFile file) {
+    List<BankTransactionDto> transactions = new ArrayList<>();
+    try (Workbook workbook = new XSSFWorkbook(file.getInputStream())) {
+      Sheet sheet = workbook.getSheetAt(0);
+      for (int i = 19; i <= sheet.getLastRowNum(); i++) {
+        Row row = sheet.getRow(i);
+        if (row != null && row.getCell(6) != null && !row.getCell(6).getStringCellValue().isEmpty()) {
+          java.sql.Date data = Utils.convertJavaToSqlDate(row.getCell(0).getDateCellValue());
+          String conto = row.getCell(3).getStringCellValue();
+          BigDecimal importo = BigDecimal.valueOf(row.getCell(7).getNumericCellValue());
+          Currency valuta = Currency.getInstance(row.getCell(6).getStringCellValue());
+
+          BankTransactionDto dto = new BankTransactionDto();
+          dto.setAccount(conto.replace(" ", "_").replace("/", "_"));
+          dto.setDatetime(new Timestamp(data.getTime()));
+          dto.setDescription(row.getCell(1).getStringCellValue());
+          dto.setAmount(importo);
+          dto.setFee(BigDecimal.ZERO);
+          dto.setCurrency(valuta.getCurrencyCode());
+          transactions.add(dto);
+        }
+      }
+    } catch (IOException e) {
+      throw new RuntimeException("Failed to read Sanpaolo XLSX", e);
     }
+    return transactions;
+  }
+
+  private List<BankTransactionDto> unicreditCsv(MultipartFile file) throws IOException {
+    String csvData = new String(file.getBytes());
+    List<BankTransactionDto> bankTransactionDtos = new ArrayList<>();
+    String[] lines = csvData.split("\n");
+    if (lines.length < 2) return bankTransactionDtos;
+    String[] headers = lines[0].split(";");
+    for (int i = 1; i < lines.length; i++) {
+      String[] data = lines[i].split(";", -1);
+      if (data.length != headers.length) throw new RuntimeException("Unicredit CSV row length mismatch");
+      Map<String, Object> rowData = new HashMap<>();
+      for (int j = 0; j < headers.length; j++) rowData.put(headers[j], data[j]);
+      bankTransactionDtos.add(bankTransactionMapper.toDtoFromUnicredit(rowData));
+    }
+    return bankTransactionDtos;
+  }
+
+  public List<BankTransactionDto> addTransactionsFromMultipartFile(MultipartFile file, BankName bankName) {
     try {
       List<BankTransactionDto> bankTransactionDtos;
       switch (bankName) {
-        case Degiro -> bankTransactionDtos = degiroCsv(csvData);
-        case Revolut -> bankTransactionDtos = revolutCsv(csvData);
-        case Sanpaolo -> throw new RuntimeException("Sanpaolo not implemented yet");
-        default -> throw new RuntimeException("Impossible to be here");
+        case Degiro -> bankTransactionDtos = degiroCsv(file);
+        case Revolut -> bankTransactionDtos = revolutCsv(file);
+        case Sanpaolo -> bankTransactionDtos = xlsxSanpaolo(file);
+        case Unicredit -> bankTransactionDtos = unicreditCsv(file);
+        default -> throw new RuntimeException("Unsupported bank: " + bankName);
       }
       return addTransactions(bankTransactionDtos);
     } catch (IOException e) {
-      throw new RuntimeException("Failed to read CSV data", e);
+      throw new RuntimeException("Failed to read file", e);
     } catch (Exception e) {
-      throw new RuntimeException("Error processing CSV data", e);
+      throw new RuntimeException("Error processing file", e);
     }
   }
 }
