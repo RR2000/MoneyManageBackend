@@ -21,6 +21,20 @@ public interface BankTransactionMapper {
 
   List<BankTransaction> toEntity(List<BankTransactionDto> entity);
 
+  default BankTransactionDto toDtoFromUnicredit(Map<String, Object> rowData) {
+    if (rowData == null) {
+      return null;
+    }
+    BankTransactionDto dto = new BankTransactionDto();
+    dto.setAccount("Unicredit");
+    dto.setDatetime(Timestamp.valueOf((String) rowData.get("Data Registrazione")));
+    dto.setDescription((String) rowData.get("Descrizione"));
+    dto.setAmount(new BigDecimal((String) rowData.get("Importo (EUR)")));
+    dto.setFee(BigDecimal.ZERO);
+    dto.setCurrency("EUR");
+    return dto;
+  }
+
   default BankTransactionDto toDtoFromRevolut(Map<String, Object> rowData) {
     if (rowData == null) {
       return null;
@@ -54,7 +68,7 @@ public interface BankTransactionMapper {
     }catch (Exception e){
       throw new RuntimeException();
     }
-
     return dto;
   }
+
 }

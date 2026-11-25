@@ -2,15 +2,14 @@ package com.rondinella.moneymanageapi.auth;
 
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
-import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.security.Keys;
 import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
 
+import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
-import java.security.Key;
 import java.util.Date;
 import java.util.function.Function;
 
@@ -23,15 +22,15 @@ public class JwtService {
   @Value("${app.jwt.expiration:86400000}")
   private long jwtExpiration;
 
-  private Key signingKey;
+  private SecretKey signingKey;
 
   @PostConstruct
   void init() {
     if (secretKey != null && !secretKey.isBlank()) {
       this.signingKey = Keys.hmacShaKeyFor(secretKey.getBytes(StandardCharsets.UTF_8));
     } else {
-      // No secret configured: generate a secure random key for this run.
-      this.signingKey = Keys.secretKeyFor(SignatureAlgorithm.HS256);
+      // No secret configured: random key for this run (tokens do not survive a restart).
+      this.signingKey = Jwts.SIG.HS256.key().build();
     }
   }
 
@@ -40,22 +39,21 @@ public class JwtService {
   }
 
   public <T> T extractClaim(String token, Function<Claims, T> claimsResolver) {
-    final Claims claims = extractAllClaims(token);
-    return claimsResolver.apply(claims);
+    return claimsResolver.apply(extractAllClaims(token));
   }
 
   public String generateToken(String username) {
+    long now = System.currentTimeMillis();
     return Jwts.builder()
-        .setSubject(username)
-        .setIssuedAt(new Date(System.currentTimeMillis()))
-        .setExpiration(new Date(System.currentTimeMillis() + jwtExpiration))
-        .signWith(signingKey, SignatureAlgorithm.HS256)
+        .subject(username)
+        .issuedAt(new Date(now))
+        .expiration(new Date(now + jwtExpiration))
+        .signWith(signingKey, Jwts.SIG.HS256)
         .compact();
   }
 
   public boolean isTokenValid(String token, UserDetails userDetails) {
-    final String username = extractUsername(token);
-    return username.equals(userDetails.getUsername()) && !isTokenExpired(token);
+    return extractUsername(token).equals(userDetails.getUsername()) && !isTokenExpired(token);
   }
 
   private boolean isTokenExpired(String token) {
@@ -63,10 +61,10 @@ public class JwtService {
   }
 
   private Claims extractAllClaims(String token) {
-    return Jwts.parserBuilder()
-        .setSigningKey(signingKey)
+    return Jwts.parser()
+        .verifyWith(signingKey)
         .build()
-        .parseClaimsJws(token)
-        .getBody();
+        .parseSignedClaims(token)
+        .getPayload();
   }
 }

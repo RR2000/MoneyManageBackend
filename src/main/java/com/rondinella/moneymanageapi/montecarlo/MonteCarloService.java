@@ -1,5 +1,7 @@
 package com.rondinella.moneymanageapi.montecarlo;
 
+import com.rondinella.moneymanageapi.brokertransactions.BrokerTransaction;
+import com.rondinella.moneymanageapi.brokertransactions.BrokerTransactionRepository;
 import com.rondinella.moneymanageapi.brokertransactions.BrokerTransactionService;
 import com.rondinella.moneymanageapi.common.Utils;
 import com.rondinella.moneymanageapi.common.dtos.GraphPointsDto;
@@ -15,9 +17,12 @@ import java.util.*;
 public class MonteCarloService {
 
   private final BrokerTransactionService brokerTransactionService;
+  private final BrokerTransactionRepository brokerTransactionRepository;
 
-  public MonteCarloService(BrokerTransactionService brokerTransactionService) {
+  public MonteCarloService(BrokerTransactionService brokerTransactionService,
+                           BrokerTransactionRepository brokerTransactionRepository) {
     this.brokerTransactionService = brokerTransactionService;
+    this.brokerTransactionRepository = brokerTransactionRepository;
   }
 
   /**
@@ -33,18 +38,20 @@ public class MonteCarloService {
     Timestamp to = Utils.todayAsTimestamp();
     GraphPointsDto historical = brokerTransactionService.worthGraph(from, to);
 
-    List<BigDecimal> totalWorthSeries = extractTotalWorthSeries(historical);
-
-    // Need at least 2 data points to compute returns
-    if (totalWorthSeries.size() < 2) {
+    Map<String, BigDecimal> totalWorth = historical.getGraph("Total Worth");
+    if (totalWorth == null || totalWorth.size() < 2) {
       return new GraphPointsDto();
     }
+    List<String> dates = new ArrayList<>(totalWorth.keySet());
+    List<BigDecimal> totalWorthSeries = new ArrayList<>(totalWorth.values());
+    List<BrokerTransaction> transactions = brokerTransactionRepository.findAll();
 
-    // 2. Compute monthly log-returns
+    // 2. Monthly log-returns of the market, not of the savings: the money put in during the month
+    //    (purchases at their price) is taken out of the month's growth
     List<Double> logReturns = new ArrayList<>();
     for (int i = 1; i < totalWorthSeries.size(); i++) {
       BigDecimal prev = totalWorthSeries.get(i - 1);
-      BigDecimal curr = totalWorthSeries.get(i);
+      BigDecimal curr = totalWorthSeries.get(i).subtract(invested(transactions, dates.get(i - 1), dates.get(i)));
       if (prev.compareTo(BigDecimal.ZERO) > 0 && curr.compareTo(BigDecimal.ZERO) > 0) {
         logReturns.add(Math.log(curr.doubleValue() / prev.doubleValue()));
       }
@@ -94,12 +101,16 @@ public class MonteCarloService {
     return result;
   }
 
-  private List<BigDecimal> extractTotalWorthSeries(GraphPointsDto graphPoints) {
-    Map<String, BigDecimal> totalWorthGraph = graphPoints.getGraph("Total Worth");
-    if (totalWorthGraph == null || totalWorthGraph.isEmpty()) {
-      return Collections.emptyList();
+  /** Value of the purchases (minus sales) made after {@code from} and up to {@code to} (yyyy-MM-dd). */
+  private static BigDecimal invested(List<BrokerTransaction> transactions, String from, String to) {
+    BigDecimal sum = BigDecimal.ZERO;
+    for (BrokerTransaction t : transactions) {
+      String day = t.getDatetime().toLocalDateTime().toLocalDate().toString();
+      if (day.compareTo(from) > 0 && day.compareTo(to) <= 0) {
+        sum = sum.add(t.getQuantity().multiply(t.getStockPrice()));
+      }
     }
-    return new ArrayList<>(totalWorthGraph.values());
+    return sum;
   }
 
   private double computeStdDev(List<Double> values, double mean) {

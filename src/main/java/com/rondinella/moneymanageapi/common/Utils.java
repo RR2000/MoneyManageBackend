@@ -74,8 +74,8 @@ public class Utils extends org.apache.commons.lang3.time.DateUtils {
     linkedHashSet.addAll(sortedDates);
   }
 
-  public static LinkedHashSet<String> getAllDaysBetweenTimestamps(Timestamp startTimestamp, Timestamp endTimestamp) {
-    LinkedHashSet<String> allDays = new LinkedHashSet<>();
+  public static List<String> getAllDaysBetweenTimestamps(Timestamp startTimestamp, Timestamp endTimestamp) {
+    List<String> allDays = new ArrayList<>();
 
     LocalDate startDate = startTimestamp.toLocalDateTime().toLocalDate(); // Convert seconds to days
     LocalDate endDate = endTimestamp.toLocalDateTime().toLocalDate(); // Convert seconds to days
@@ -95,13 +95,20 @@ public class Utils extends org.apache.commons.lang3.time.DateUtils {
   public static Timestamp stringToTimestamp(String string) {
     return Timestamp.from(Utils.parseDate(
         string,
-        "yyyy-MM-dd"
+        "yyyy-MM-dd",
+        "yyyy-MM-dd hh:mm:ss.SSS"
     ).toInstant());
   }
 
   public static String convertTimestampToString(Timestamp timestamp) {
     SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
     return sdf.format(timestamp);
+  }
+
+  public static java.sql.Date convertJavaToSqlDate(Date javaDate) {
+    if(javaDate == null)
+      return null;
+    return new java.sql.Date(javaDate.getTime());
   }
 
   public static String convertDateToString(java.util.Date date) {
@@ -116,5 +123,9 @@ public class Utils extends org.apache.commons.lang3.time.DateUtils {
 
   public static String calendarToString(Calendar calendar) {
     return convertDateToString(calendar.getTime());
+  }
+
+  public static Timestamp calendarToTimestamp(Calendar calendar){
+    return Timestamp.from(calendar.getTime().toInstant());
   }
 }
