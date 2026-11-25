@@ -141,12 +141,13 @@ public class GraphPointsDto implements Serializable {
     return null;
   }
 
+  /** null for an empty graph (an account without data): it is serialized, it must not throw */
   public String getFirstLabel() {
-    return ((TreeSet<String>)uniqueLabels).first();
+    return uniqueLabels.isEmpty() ? null : ((TreeSet<String>) uniqueLabels).first();
   }
 
   public String getLastLabel() {
-    return ((TreeSet<String>)uniqueLabels).last();
+    return uniqueLabels.isEmpty() ? null : ((TreeSet<String>) uniqueLabels).last();
   }
 
   public void addTotalColumn(String totalColumnName, String... graphNames) {

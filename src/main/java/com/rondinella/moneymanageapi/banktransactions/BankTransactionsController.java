@@ -6,6 +6,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
 import java.sql.Timestamp;
@@ -31,9 +32,16 @@ public class BankTransactionsController {
     return new ResponseEntity<>(bankTransactionService.findTransactionsByAccount(accountName), HttpStatus.OK);
   }
 
-  @GetMapping("/accounts/{accountName}/computeCumulativeAmount/{amountToday}")
-  public ResponseEntity<?> computeCumulativeAmount(@PathVariable String accountName, @PathVariable BigDecimal amountToday) {
-    return new ResponseEntity<>(bankTransactionService.computeCumulativeAmount(accountName, amountToday), HttpStatus.OK);
+  /** Today's balance of the account, in the body: an amount in the URL would end up in the access logs. */
+  public record TodayBalance(BigDecimal amountToday) {
+  }
+
+  @PostMapping("/accounts/{accountName}/balance")
+  public ResponseEntity<?> computeCumulativeAmount(@PathVariable String accountName, @RequestBody TodayBalance body) {
+    if (body == null || body.amountToday() == null) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "amountToday is required");
+    }
+    return new ResponseEntity<>(bankTransactionService.computeCumulativeAmount(accountName, body.amountToday()), HttpStatus.OK);
   }
 
   @GetMapping("/accounts/{accountName}/{timestamp}")

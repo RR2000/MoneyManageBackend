@@ -21,7 +21,7 @@ import static org.hamcrest.Matchers.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-@SpringBootTest
+@SpringBootTest(properties = "app.auth.max-registrations=10000")
 @AutoConfigureMockMvc
 class MoneyManageApiTests {
 
@@ -156,7 +156,8 @@ class MoneyManageApiTests {
     mvc.perform(multipart("/api/banks/transactions/{bank}/upload", "Revolut").file(file).header("Authorization", auth))
         .andExpect(status().isCreated())
         .andExpect(jsonPath("$", hasSize(2)));
-    mvc.perform(get("/api/banks/transactions/accounts/{a}/computeCumulativeAmount/{v}", "Revolut_Current", "96.50")
+    mvc.perform(post("/api/banks/transactions/accounts/{a}/balance", "Revolut_Current")
+            .contentType(MediaType.APPLICATION_JSON).content("{\"amountToday\": 96.50}")
             .header("Authorization", auth))
         .andExpect(status().isOk());
     mvc.perform(get("/api/banks/transactions/accounts/{a}/{t}", "Revolut_Current", "2025-01-02 23:00:00")
