@@ -1,9 +1,10 @@
 package com.rondinella.moneymanageapi.auth;
 
+import com.rondinella.moneymanageapi.tenant.TenantContext;
 import jakarta.persistence.*;
 
 @Entity
-@Table(name = "users")
+@Table(name = "users", schema = TenantContext.SHARED)
 public class User {
   @Id
   @GeneratedValue(strategy = GenerationType.IDENTITY)

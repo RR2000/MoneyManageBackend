@@ -18,7 +18,7 @@ public interface BankTransactionRepository extends JpaRepository<BankTransaction
 
   List<BankTransaction> findTransactionByAccountOrderByDatetimeDesc(String account);
 
-  List<BankTransaction> findTransactionByAccountAndDatetimeGreaterThanOrderByDatetimeDesc(String account, Timestamp day);
+  BankTransaction findFirstByAccountAndDatetimeLessThanEqualOrderByDatetimeDesc(String account, Timestamp day);
 
   List<BankTransaction> findByDatetimeBetweenAndAccount(Timestamp startTimestamp, Timestamp endTimestamp, String account);
 

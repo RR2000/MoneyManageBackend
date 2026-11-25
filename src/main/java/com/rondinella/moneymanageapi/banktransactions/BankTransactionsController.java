@@ -1,7 +1,6 @@
 package com.rondinella.moneymanageapi.banktransactions;
 
 import com.rondinella.moneymanageapi.banktransactions.BankTransactionService.BankName;
-import com.rondinella.moneymanageapi.common.Utils;
 import io.swagger.v3.oas.annotations.Parameter;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -46,8 +45,6 @@ public class BankTransactionsController {
   public ResponseEntity<?> historyBetweenDatesGraph(
       @PathVariable @Parameter(example = "2024-01-01 00:00:00.000") Timestamp fromTimestamp,
       @PathVariable @Parameter(example = "2024-03-31 23:59:59.999") Timestamp toTimestamp) {
-    fromTimestamp = Utils.stringToTimestamp("2024-01-01 00:00:00.000");
-    toTimestamp = Utils.todayAsTimestamp();
     return new ResponseEntity<>(bankTransactionService.historyBetweenDates(fromTimestamp, toTimestamp), HttpStatus.OK);
   }
 
@@ -56,8 +53,6 @@ public class BankTransactionsController {
       @PathVariable @Parameter(example = "2024-01-01 00:00:00.000") Timestamp fromTimestamp,
       @PathVariable @Parameter(example = "2024-03-31 23:59:59.999") Timestamp toTimestamp,
       @RequestParam String accountName) {
-    fromTimestamp = Utils.stringToTimestamp("2024-01-01 00:00:00.000");
-    toTimestamp = Utils.todayAsTimestamp();
     return new ResponseEntity<>(bankTransactionService.historyBetweenDates(fromTimestamp, toTimestamp, accountName), HttpStatus.OK);
   }
 
@@ -74,11 +69,6 @@ public class BankTransactionsController {
   @PostMapping(value = "/{bankName}/upload", consumes = "multipart/form-data")
   public ResponseEntity<?> uploadTransactions(@RequestParam MultipartFile multipartFile, @PathVariable BankName bankName) {
     return ResponseEntity.status(HttpStatus.CREATED).body(bankTransactionService.addTransactionsFromMultipartFile(multipartFile, bankName));
-  }
-
-  @GetMapping("/daily-balance/{accountName}")
-  public ResponseEntity<?> getDailyBalance(@PathVariable String accountName) {
-    return ResponseEntity.ok(bankTransactionService.getDailyBalance(accountName));
   }
 
   @GetMapping("/daily-balance/{accountName}")

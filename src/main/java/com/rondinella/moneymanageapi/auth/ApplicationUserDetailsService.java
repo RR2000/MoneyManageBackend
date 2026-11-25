@@ -1,6 +1,5 @@
 package com.rondinella.moneymanageapi.auth;
 
-import org.springframework.security.core.userdetails.User;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
@@ -17,12 +16,8 @@ public class ApplicationUserDetailsService implements UserDetailsService {
 
   @Override
   public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
-    com.rondinella.moneymanageapi.auth.User user = userRepository.findByUsername(username)
+    return userRepository.findByUsername(username)
+        .map(AppUserDetails::new)
         .orElseThrow(() -> new UsernameNotFoundException("User not found: " + username));
-    return User.builder()
-        .username(user.getUsername())
-        .password(user.getPassword())
-        .roles(user.getRole())
-        .build();
   }
 }

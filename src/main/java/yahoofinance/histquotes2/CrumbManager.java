@@ -1,75 +1,62 @@
 package yahoofinance.histquotes2;
 
-import org.openqa.selenium.By;
-import org.openqa.selenium.Cookie;
-import org.openqa.selenium.WebDriver;
-import org.openqa.selenium.WebElement;
-import org.openqa.selenium.chrome.ChromeDriver;
-import org.openqa.selenium.chrome.ChromeOptions;
-import org.openqa.selenium.remote.RemoteWebDriver;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.io.IOException;
-import java.net.URL;
-import java.util.Set;
+import java.net.CookieManager;
+import java.net.HttpCookie;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.time.Duration;
+import java.util.stream.Collectors;
 
 /**
  * Created by Stijn on 23/05/2017.
+ * Cookie and crumb for the Yahoo Finance endpoints that need them, with plain HTTP calls
+ * (a first request sets the cookie, getcrumb returns the crumb for that cookie).
  */
 public class CrumbManager {
 
-  private static final Logger log = LoggerFactory.getLogger(CrumbManager.class);
+  private static final String COOKIE_URL = "https://fc.yahoo.com";
+  private static final String CRUMB_URL = "https://query1.finance.yahoo.com/v1/test/getcrumb";
+  private static final String USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36";
 
   private static String crumb = "";
   private static String cookie = "";
 
   private static void setCookieAndCrumb() throws IOException {
-    // Configure Chrome options to disable notifications
-    ChromeOptions chromeOptions = new ChromeOptions();
-    chromeOptions.addArguments("--disable-notifications");
-    chromeOptions.addArguments("--no-sandbox");
-    chromeOptions.addArguments("--headless");
-    chromeOptions.addArguments("--disable-gpu");
-    chromeOptions.addArguments("--disable-dev-shm-usage");
-    chromeOptions.addArguments("--remote-debugging-port=9222");
-    // Define Selenium WebDriver URL
-    String seleniumUrl = "http://127.0.0.1:4444/wd/hub";
-    // Create a new instance of the ChromeDriver with configured options
-    WebDriver driver = new RemoteWebDriver(new URL(seleniumUrl), chromeOptions);
-
+    CookieManager cookies = new CookieManager();
+    HttpClient client = HttpClient.newBuilder()
+        .cookieHandler(cookies)
+        .followRedirects(HttpClient.Redirect.NORMAL)
+        .connectTimeout(Duration.ofSeconds(10))
+        .build();
     try {
-      // Navigate to Yahoo homepage
-      driver.get("https://www.yahoo.com");
-
-      // Accept cookies if the consent dialog is present
-      try {
-        WebElement acceptCookiesButton = driver.findElement(By.xpath("//button[@class='btn secondary accept-all consent_reject_all_3']"));
-        acceptCookiesButton.click();
-      } catch (Exception e) {
-        System.out.println("No cookie consent dialog found.");
+      // the answer is usually a 404, what matters is the cookie it sets
+      client.send(request(COOKIE_URL), HttpResponse.BodyHandlers.discarding());
+      HttpResponse<String> response = client.send(request(CRUMB_URL), HttpResponse.BodyHandlers.ofString());
+      if (response.statusCode() != 200) {
+        throw new IOException("Yahoo Finance crumb: HTTP " + response.statusCode());
       }
-
-      // Navigate to the URL
-      driver.get("https://query1.finance.yahoo.com/v1/test/getcrumb");
-
-      // Get the page source (HTML) and store it in the crumb string
-      crumb = driver.findElement(By.tagName("pre")).getText();
-
-      // Get cookies and store them in the cookie string
-      Set<Cookie> cookies = driver.manage().getCookies();
-      StringBuilder cookieBuilder = new StringBuilder();
-      for (org.openqa.selenium.Cookie c : cookies) {
-        cookieBuilder.append(c.getName()).append("=").append(c.getValue()).append("; ");
-      }
-      cookie = cookieBuilder.toString();
-    } finally {
-      // Close the browser
-      driver.quit();
+      crumb = response.body().trim();
+      cookie = cookies.getCookieStore().getCookies().stream()
+          .map(HttpCookie::toString)
+          .collect(Collectors.joining("; "));
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      throw new IOException("Interrupted while asking Yahoo Finance for a crumb", e);
     }
   }
 
-  public static void refresh() throws IOException {
+  private static HttpRequest request(String url) {
+    return HttpRequest.newBuilder(URI.create(url))
+        .header("User-Agent", USER_AGENT)
+        .timeout(Duration.ofSeconds(10))
+        .GET()
+        .build();
+  }
+
+  public static synchronized void refresh() throws IOException {
     setCookieAndCrumb();
   }
 
@@ -80,11 +67,10 @@ public class CrumbManager {
     return crumb;
   }
 
-  public static String getCookie() throws IOException {
+  public static synchronized String getCookie() throws IOException {
     if (cookie == null || cookie.isEmpty()) {
       refresh();
     }
     return cookie;
   }
-
 }

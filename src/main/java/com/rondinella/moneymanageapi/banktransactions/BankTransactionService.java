@@ -1,12 +1,14 @@
 package com.rondinella.moneymanageapi.banktransactions;
 
 import com.opencsv.CSVReader;
+import com.opencsv.exceptions.CsvValidationException;
 import com.rondinella.moneymanageapi.common.Utils;
-import com.rondinella.moneymanageapi.common.configurations.AccountBaseProperties;
 import com.rondinella.moneymanageapi.common.dtos.GraphPointsDto;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
@@ -27,15 +29,12 @@ public class BankTransactionService {
 
   final BankTransactionRepository bankTransactionRepository;
   final DailyBalanceRepository dailyBalanceRepository;
-  final AccountBaseProperties accountBaseProperties;
   BankTransactionMapper bankTransactionMapper = BankTransactionMapper.INSTANCE;
 
   public BankTransactionService(BankTransactionRepository bankTransactionRepository,
-                                DailyBalanceRepository dailyBalanceRepository,
-                                AccountBaseProperties accountBaseProperties) {
+                                DailyBalanceRepository dailyBalanceRepository) {
     this.bankTransactionRepository = bankTransactionRepository;
     this.dailyBalanceRepository = dailyBalanceRepository;
-    this.accountBaseProperties = accountBaseProperties;
   }
 
   public List<BankTransactionDto> findAllTransactions() {
@@ -52,6 +51,9 @@ public class BankTransactionService {
 
   public boolean computeCumulativeAmount(String account, BigDecimal todayMoney) {
     List<BankTransaction> bankTransactions = bankTransactionRepository.findTransactionByAccountOrderByDatetimeDesc(account);
+    if (bankTransactions.isEmpty()) {
+      return false;
+    }
 
     BigDecimal cumulative = todayMoney;
     bankTransactions.get(0).setCumulativeAmount(cumulative);
@@ -78,14 +80,10 @@ public class BankTransactionService {
     return true;
   }
 
+  /** Balance of the account at the end of that day: the cumulative amount of its last transaction until then. */
   public BigDecimal amountOnThatDay(String accountName, Timestamp thatDay) {
-    Map<String, BigDecimal> base = accountBaseProperties.getAmounts();
-    List<BankTransaction> bankTransactions = bankTransactionRepository.findTransactionByAccountAndDatetimeGreaterThanOrderByDatetimeDesc(accountName, thatDay);
-    BigDecimal sum = base.get(accountName);
-    for (BankTransaction bankTransaction : bankTransactions) {
-      sum = sum.subtract(bankTransaction.getAmount()).subtract(bankTransaction.getFee());
-    }
-    return sum;
+    BankTransaction last = bankTransactionRepository.findFirstByAccountAndDatetimeLessThanEqualOrderByDatetimeDesc(accountName, thatDay);
+    return last == null || last.getCumulativeAmount() == null ? BigDecimal.ZERO : last.getCumulativeAmount();
   }
 
   public List<DailyBalance> getDailyBalance(String account) {
@@ -147,7 +145,7 @@ public class BankTransactionService {
     return bankTransactionMapper.toDto(txAdded);
   }
 
-  private List<BankTransactionDto> revolutCsv(MultipartFile file) throws IOException {
+  private List<BankTransactionDto> revolutCsv(MultipartFile file) throws IOException, CsvValidationException {
     String csvData = new String(file.getBytes());
     List<BankTransactionDto> bankTransactionDtos = new ArrayList<>();
     try (CSVReader reader = new CSVReader(new StringReader(csvData))) {
@@ -165,7 +163,7 @@ public class BankTransactionService {
     return bankTransactionDtos;
   }
 
-  public List<BankTransactionDto> degiroCsv(MultipartFile file) throws IOException {
+  public List<BankTransactionDto> degiroCsv(MultipartFile file) throws IOException, CsvValidationException {
     String csvData = new String(file.getBytes());
     List<BankTransactionDto> bankTransactionDtos = new ArrayList<>();
     try (CSVReader reader = new CSVReader(new StringReader(csvData))) {
@@ -243,10 +241,9 @@ public class BankTransactionService {
         default -> throw new RuntimeException("Unsupported bank: " + bankName);
       }
       return addTransactions(bankTransactionDtos);
-    } catch (IOException e) {
-      throw new RuntimeException("Failed to read file", e);
     } catch (Exception e) {
-      throw new RuntimeException("Error processing file", e);
+      // unreadable file or a format that does not match the bank: the user's fault, not a server error
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Cannot read the " + bankName + " file: " + e.getMessage(), e);
     }
   }
 }

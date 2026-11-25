@@ -8,7 +8,6 @@ import java.math.BigDecimal;
 import java.util.List;
 
 @RestController
-@CrossOrigin(origins = "http://localhost:4200")
 @RequestMapping(path = "/api/realestate", produces = "application/json")
 public class RealEstateController {
 
