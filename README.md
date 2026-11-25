@@ -6,7 +6,8 @@ This is the REST API (Spring Boot); the web app is in
 [MoneyManageFrontend](https://github.com/RR2000/MoneyManageFrontend).
 
 Demo: https://money.raoulrondinella.dev - register with any username; tick "sample data" to start with a
-made-up year of movements, or leave it empty and upload your own files. Every account sees only its own data.
+made-up year of movements, or leave it empty and upload your own files (or "Accedi con GitHub"). Every account
+sees only its own data.
 
 ## What it does
 
@@ -18,7 +19,8 @@ made-up year of movements, or leave it empty and upload your own files. Every ac
   [yahoofinance-api](https://github.com/sstrickx/yahoofinance-api) client) and are cached in the database.
 - **Real estate**: CRUD with total estimated value.
 - **Monte Carlo**: projection of the portfolio from its historical monthly returns (percentiles P5-P95).
-- **Accounts**: registration and login with a JWT. Each user has a PostgreSQL schema of their own
+- **Accounts**: registration and login with a JWT, optional "Accedi con GitHub" (an account is found again only by a
+  verified GitHub email). Each user has a PostgreSQL schema of their own
   (Hibernate multi-tenancy, schema per user): data never mix.
 
 API docs: `/swagger-ui.html` on the backend.
@@ -42,6 +44,7 @@ The database user must be able to create schemas in its database (one schema per
 |---|---|---|
 | `DB_URL` | `jdbc:postgresql://localhost:5432/money` | JDBC URL |
 | `DB_USER` / `DB_PASSWORD` | `money` / empty | credentials |
+| `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | empty (off) | GitHub OAuth App for "Accedi con GitHub", callback `https://<site>/api/login/oauth2/code/github` |
 | `MONEY_JWT_SECRET` | random at every start | HMAC key (>= 32 characters) of the login tokens |
 | `MONEY_CORS_ORIGINS` | `http://localhost:4200` | only for a web app on another origin |
 
