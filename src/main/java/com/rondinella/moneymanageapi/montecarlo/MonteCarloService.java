@@ -5,7 +5,9 @@ import com.rondinella.moneymanageapi.brokertransactions.BrokerTransactionReposit
 import com.rondinella.moneymanageapi.brokertransactions.BrokerTransactionService;
 import com.rondinella.moneymanageapi.common.Utils;
 import com.rondinella.moneymanageapi.common.dtos.GraphPointsDto;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -25,6 +27,10 @@ public class MonteCarloService {
     this.brokerTransactionRepository = brokerTransactionRepository;
   }
 
+  public static final int MAX_YEARS = 50;
+  public static final int MIN_SIMULATIONS = 100;
+  public static final int MAX_SIMULATIONS = 20_000;
+
   /**
    * Runs a Monte Carlo simulation projecting portfolio worth into the future.
    *
@@ -33,6 +39,11 @@ public class MonteCarloService {
    * @return GraphPointsDto with percentile curves: P5, P25, P50, P75, P95
    */
   public GraphPointsDto simulate(int years, int simulations) {
+    // bounded: the work grows with years x simulations, and anybody with an account can ask
+    if (years < 1 || years > MAX_YEARS || simulations < MIN_SIMULATIONS || simulations > MAX_SIMULATIONS) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "years: 1-" + MAX_YEARS + ", simulations: "
+          + MIN_SIMULATIONS + "-" + MAX_SIMULATIONS);
+    }
     // 1. Get historical monthly returns from the broker worth graph
     Timestamp from = Utils.stringToTimestamp("2021-01-01");
     Timestamp to = Utils.todayAsTimestamp();
@@ -67,34 +78,32 @@ public class MonteCarloService {
     double startValue = totalWorthSeries.get(totalWorthSeries.size() - 1).doubleValue();
     int months = years * 12;
 
-    // 3. Run simulations
+    // 3. Run the simulations month by month, keeping only the current value of each path
+    //    (memory: one value per path, not one per path and month)
     Random rng = new Random(42);
-    double[][] paths = new double[simulations][months + 1];
-    for (int s = 0; s < simulations; s++) {
-      paths[s][0] = startValue;
-      for (int m = 1; m <= months; m++) {
-        double shock = meanReturn + stdDev * rng.nextGaussian();
-        paths[s][m] = paths[s][m - 1] * Math.exp(shock);
-      }
-    }
+    double[] values = new double[simulations];
+    Arrays.fill(values, startValue);
+    double[] sorted = new double[simulations];
 
-    // 4. Extract percentiles at each time step
+    // 4. Percentiles at each time step
     int[] percentileValues = {5, 25, 50, 75, 95};
     GraphPointsDto result = new GraphPointsDto();
 
     LocalDate today = LocalDate.now();
     for (int m = 0; m <= months; m++) {
-      String label = today.plusMonths(m).withDayOfMonth(1).toString();
-      double[] colValues = new double[simulations];
-      for (int s = 0; s < simulations; s++) {
-        colValues[s] = paths[s][m];
+      if (m > 0) {
+        for (int s = 0; s < simulations; s++) {
+          values[s] *= Math.exp(meanReturn + stdDev * rng.nextGaussian());
+        }
       }
-      Arrays.sort(colValues);
+      String label = today.plusMonths(m).withDayOfMonth(1).toString();
+      System.arraycopy(values, 0, sorted, 0, simulations);
+      Arrays.sort(sorted);
 
       for (int pct : percentileValues) {
         String seriesName = "P" + pct;
         int idx = (int) Math.floor(pct / 100.0 * (simulations - 1));
-        result.addPoint(seriesName, label, BigDecimal.valueOf(colValues[idx]).setScale(2, RoundingMode.HALF_UP));
+        result.addPoint(seriesName, label, BigDecimal.valueOf(sorted[idx]).setScale(2, RoundingMode.HALF_UP));
       }
     }
 

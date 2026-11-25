@@ -108,6 +108,7 @@ public class BankTransactionService {
   }
 
   public GraphPointsDto historyBetweenDates(Timestamp startTimestamp, Timestamp endTimestamp) {
+    Utils.requireSaneRange(startTimestamp, endTimestamp);
     GraphPointsDto result = new GraphPointsDto();
     List<String> daysList = Utils.getAllDaysBetweenTimestamps(startTimestamp, endTimestamp);
     List<String> accounts = bankTransactionRepository.findDistinctAccounts();
@@ -143,6 +144,11 @@ public class BankTransactionService {
     List<BankTransaction> txAdded = bankTransactionRepository.saveAll(txToAdd);
     bankTransactionRepository.flush();
     return bankTransactionMapper.toDto(txAdded);
+  }
+
+  static {
+    // an .xlsx is a zip: no entry may inflate beyond 100 MB (zip bomb), the ratio check of POI stays on
+    org.apache.poi.openxml4j.util.ZipSecureFile.setMaxEntrySize(100L * 1024 * 1024);
   }
 
   private List<BankTransactionDto> revolutCsv(MultipartFile file) throws IOException, CsvValidationException {

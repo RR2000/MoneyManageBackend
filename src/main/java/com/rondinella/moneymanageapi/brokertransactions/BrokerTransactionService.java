@@ -8,7 +8,9 @@ import com.rondinella.moneymanageapi.common.marketdata.MarketData;
 import com.rondinella.moneymanageapi.stocks.ParentStock;
 import com.rondinella.moneymanageapi.stocks.Stock;
 import lombok.SneakyThrows;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.io.IOException;
 import java.math.BigDecimal;
@@ -45,6 +47,7 @@ public class BrokerTransactionService {
 
   @SneakyThrows
   public GraphPointsDto worthGraph(Timestamp fromTimestamp, Timestamp toTimestamp) {
+    Utils.requireSaneRange(fromTimestamp, toTimestamp);
     GraphPointsDto result = new GraphPointsDto();
 
     Calendar from = Utils.toCalendar(fromTimestamp);
@@ -132,8 +135,8 @@ public class BrokerTransactionService {
   }
 
   public List<BrokerTransaction> addTransactionsFromCsv(String csvData, BrokerName bankName) {
-    if (csvData == null || csvData.isEmpty()) {
-      throw new RuntimeException("CSV data is empty");
+    if (csvData == null || csvData.isBlank()) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "The CSV is empty");
     }
     try {
       List<BrokerTransactionDto> brokerTransactionDtos;
@@ -144,11 +147,9 @@ public class BrokerTransactionService {
       }
 
       return addTransactions(brokerTransactionDtos);
-    } catch (IOException e) {
-      throw new RuntimeException("Failed to read CSV data", e);
     } catch (Exception e) {
-      // Handle any other exceptions that might occur during processing
-      throw new RuntimeException("Error processing CSV data", e);
+      // unreadable file or not a Degiro export: the user's fault, not a server error (and no detail of the rows)
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Cannot read the " + bankName + " CSV", e);
     }
   }
 

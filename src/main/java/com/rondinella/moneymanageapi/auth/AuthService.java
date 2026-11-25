@@ -8,6 +8,7 @@ import com.rondinella.moneymanageapi.tenant.TenantContext;
 import com.rondinella.moneymanageapi.tenant.TenantSchemas;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -28,15 +29,18 @@ public class AuthService {
   private final AuthenticationManager authenticationManager;
   private final TenantSchemas tenantSchemas;
   private final SampleData sampleData;
+  private final LoginThrottle throttle;
 
   public AuthService(UserRepository userRepository, PasswordEncoder passwordEncoder, JwtService jwtService,
-                     AuthenticationManager authenticationManager, TenantSchemas tenantSchemas, SampleData sampleData) {
+                     AuthenticationManager authenticationManager, TenantSchemas tenantSchemas, SampleData sampleData,
+                     LoginThrottle throttle) {
     this.userRepository = userRepository;
     this.passwordEncoder = passwordEncoder;
     this.jwtService = jwtService;
     this.authenticationManager = authenticationManager;
     this.tenantSchemas = tenantSchemas;
     this.sampleData = sampleData;
+    this.throttle = throttle;
   }
 
   public AuthResponse register(RegisterRequest request) {
@@ -55,6 +59,7 @@ public class AuthService {
     if (userRepository.findByUsername(username).isPresent()) {
       throw new ResponseStatusException(HttpStatus.CONFLICT, "Username already taken");
     }
+    throttle.register();
     User user = createAccount(username, request.getPassword(), null);
     if (request.isSampleData()) {
       TenantContext.runAs(TenantContext.schemaOf(user.getId()), () -> {
@@ -83,8 +88,16 @@ public class AuthService {
   }
 
   public AuthResponse login(LoginRequest request) {
-    authenticationManager.authenticate(
-        new UsernamePasswordAuthenticationToken(request.getUsername(), request.getPassword()));
-    return new AuthResponse(jwtService.generateToken(request.getUsername()));
+    String username = request.getUsername() == null ? "" : request.getUsername();
+    throttle.checkLogin(username);
+    try {
+      authenticationManager.authenticate(new UsernamePasswordAuthenticationToken(username, request.getPassword()));
+    } catch (BadCredentialsException e) {
+      // also for a username that does not exist (Spring answers the same way, in the same time)
+      throttle.loginFailed(username);
+      throw e;
+    }
+    throttle.loginSucceeded(username);
+    return new AuthResponse(jwtService.generateToken(username));
   }
 }

@@ -16,6 +16,8 @@ import java.util.function.Function;
 @Service
 public class JwtService {
 
+  private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(JwtService.class);
+
   @Value("${app.jwt.secret:}")
   private String secretKey;
 
@@ -27,9 +29,15 @@ public class JwtService {
   @PostConstruct
   void init() {
     if (secretKey != null && !secretKey.isBlank()) {
-      this.signingKey = Keys.hmacShaKeyFor(secretKey.getBytes(StandardCharsets.UTF_8));
+      byte[] bytes = secretKey.getBytes(StandardCharsets.UTF_8);
+      // a short or made-up secret ("change-me") can be guessed, and with it any token forged: refuse to start
+      if (bytes.length < 32 || secretKey.chars().distinct().count() < 10) {
+        throw new IllegalStateException("app.jwt.secret (MONEY_JWT_SECRET) must be at least 32 random characters");
+      }
+      this.signingKey = Keys.hmacShaKeyFor(bytes);
     } else {
       // No secret configured: random key for this run (tokens do not survive a restart).
+      log.info("No MONEY_JWT_SECRET: random signing key, logins end at every restart");
       this.signingKey = Jwts.SIG.HS256.key().build();
     }
   }
