@@ -111,35 +111,47 @@ public class SymbolResolver {
     }
     Set<String> tickers = new LinkedHashSet<>();
     candidates.values().forEach(l -> tickers.add(l.ticker()));
+    // every listing Alpha Vantage has among the candidates, searching ticker after ticker until one quotes in euro:
+    // the first ticker can be a listing in pence (SWDA in London, GBX) while the euro one has another ticker
+    Map<String, AlphaVantage.Match> offered = new LinkedHashMap<>();
     int searches = 0;
     for (String ticker : tickers) {
-      if (searches++ >= MAX_SEARCHES) {
+      if (searches++ >= MAX_SEARCHES || usable(candidates, offered).stream()
+          .anyMatch(m -> INVESTMENT_CURRENCY.equals(m.currency()))) {
         break;
       }
-      Map<String, AlphaVantage.Match> offered = new LinkedHashMap<>();
       for (AlphaVantage.Match m : alphaVantage.search(ticker)) {
         offered.putIfAbsent(m.symbol().toUpperCase(Locale.ROOT), m);
       }
-      List<AlphaVantage.Match> usable = new ArrayList<>();
-      for (String symbol : candidates.keySet()) {
-        if (offered.containsKey(symbol)) {
-          usable.add(offered.get(symbol));
-        }
-      }
-      Optional<AlphaVantage.Match> best = usable.stream()
-          .filter(m -> INVESTMENT_CURRENCY.equals(m.currency())).findFirst()
-          .or(() -> usable.stream().findFirst());
-      if (best.isPresent()) {
-        result.setSymbol(best.get().symbol());
-        result.setCurrency(best.get().currency());
-        result.setName(trim(best.get().name()));
-        return result;
-      }
+    }
+    List<AlphaVantage.Match> usable = usable(candidates, offered);
+    // euro first, then a known currency (an unknown one is usually pence), then anything
+    Optional<AlphaVantage.Match> best = usable.stream()
+        .filter(m -> INVESTMENT_CURRENCY.equals(m.currency())).findFirst()
+        .or(() -> usable.stream().filter(m -> m.currency() != null).findFirst())
+        .or(() -> usable.stream().findFirst());
+    if (best.isPresent()) {
+      result.setSymbol(best.get().symbol());
+      result.setCurrency(best.get().currency());
+      result.setName(trim(best.get().name()));
+      return result;
     }
     if (!listings.isEmpty()) {
       result.setName(trim(listings.getFirst().name()));
     }
     return result;
+  }
+
+  /** The candidates Alpha Vantage offers, in order of preference. */
+  private static List<AlphaVantage.Match> usable(Map<String, OpenFigi.Listing> candidates,
+                                                 Map<String, AlphaVantage.Match> offered) {
+    List<AlphaVantage.Match> usable = new ArrayList<>();
+    for (String symbol : candidates.keySet()) {
+      if (offered.containsKey(symbol)) {
+        usable.add(offered.get(symbol));
+      }
+    }
+    return usable;
   }
 
   private static String trim(String name) {

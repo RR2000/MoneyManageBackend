@@ -140,6 +140,50 @@ class InstrumentsTests {
   }
 
   @Test
+  void aListingInPenceIsNotPickedWhenAnotherTickerQuotesInEuro() throws Exception {
+    String auth = register();
+    String isin = isin();
+    buy(auth, isin);
+    // as OpenFIGI answers for IE00B4L5Y983: SWDA in Milan and London, IWDA in London and Amsterdam
+    when(openFigi.listings(isin)).thenReturn(List.of(
+        new OpenFigi.Listing("SWDA", "IM", "ISHARES CORE MSCI WORLD"),
+        new OpenFigi.Listing("SWDA", "LN", "ISHARES CORE MSCI WORLD"),
+        new OpenFigi.Listing("IWDA", "LN", "ISHARES CORE MSCI WORLD"),
+        new OpenFigi.Listing("IWDA", "NA", "ISHARES CORE MSCI WORLD")));
+    // Alpha Vantage has SWDA only in London, in pence (GBX: no currency)
+    when(alphaVantage.search("SWDA")).thenReturn(List.of(
+        new AlphaVantage.Match("SWDA.LON", "iShares Core MSCI World", "United Kingdom", null)));
+    when(alphaVantage.search("IWDA")).thenReturn(List.of(
+        new AlphaVantage.Match("IWDA.LON", "iShares Core MSCI World", "United Kingdom", USD),
+        new AlphaVantage.Match("IWDA.AMS", "iShares Core MSCI World", "Amsterdam", EUR)));
+    when(alphaVantage.weekly(eq("IWDA.AMS"), eq(isin), any())).thenReturn(weekly("IWDA.AMS", isin, "100", EUR));
+
+    mvc.perform(get(GRAPH).header("Authorization", auth))
+        .andExpect(jsonPath("$.graphData['" + isin + "'].*", everyItem(comparesEqualTo(1000.0))));
+    mvc.perform(get("/api/instruments").header("Authorization", auth))
+        .andExpect(jsonPath("$.instruments[0].symbol").value("IWDA.AMS"))
+        .andExpect(jsonPath("$.instruments[0].currencyWarning").value(false));
+    verify(alphaVantage, never()).weekly(eq("SWDA.LON"), anyString(), any());
+  }
+
+  @Test
+  void aSymbolInAnUnknownCurrencyIsFlagged() throws Exception {
+    String auth = register();
+    String isin = isin();
+    buy(auth, isin);
+    when(openFigi.listings(isin)).thenReturn(List.of(new OpenFigi.Listing("SWDA", "LN", "ISHARES CORE MSCI WORLD")));
+    when(alphaVantage.search("SWDA")).thenReturn(List.of(
+        new AlphaVantage.Match("SWDA.LON", "iShares Core MSCI World", "United Kingdom", null)));
+    when(alphaVantage.weekly(eq("SWDA.LON"), eq(isin), any())).thenReturn(weekly("SWDA.LON", isin, "10243", null));
+
+    mvc.perform(get(GRAPH).header("Authorization", auth)).andExpect(status().isOk());
+    mvc.perform(get("/api/instruments").header("Authorization", auth))
+        .andExpect(jsonPath("$.instruments[0].symbol").value("SWDA.LON"))
+        .andExpect(jsonPath("$.instruments[0].quoteCurrency").doesNotExist())
+        .andExpect(jsonPath("$.instruments[0].currencyWarning").value(true));
+  }
+
+  @Test
   void withoutAlphaVantagePricesYahooIsTheLastResort() throws Exception {
     String auth = register();
     String isin = isin();
