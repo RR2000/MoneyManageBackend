@@ -13,6 +13,6 @@ public class OpenApiConfig {
 
   @Bean
   public OpenAPI baseOpenApi() {
-    return new OpenAPI().info(new Info().title("MoneyManageBackend").version("0.1").description("MoneyManageBackend"));
+    return new OpenAPI().info(new Info().title("money-manage-backend").version("0.1").description("MoneyManage REST API"));
   }
 }
