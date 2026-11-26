@@ -32,7 +32,7 @@ public class MailConfig {
                             @Value("${app.mail.username:}") String username,
                             @Value("${app.mail.password:}") String password,
                             @Value("${app.mail.from:}") String from,
-                            @Value("${app.mail.from-name:MoneyManage}") String fromName,
+                            @Value("${app.mail.from-name:Money Manage}") String fromName,
                             @Value("${app.web-url:}") String webUrl) {
     MailSettings settings = new MailSettings(host, port, username, password, from, fromName, webUrl);
     log.info("Password reset by email: {}", settings.enabled() ? "on" : "off");

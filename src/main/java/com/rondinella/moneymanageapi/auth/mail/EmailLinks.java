@@ -101,10 +101,10 @@ public class EmailLinks {
     }
     String token = newToken(user.get(), EmailToken.Purpose.RESET, email, RESET_TTL);
     String link = settings.web() + "/reset-password#token=" + token;
-    send(email, "MoneyManage - reimposta la password (reset your password)", """
+    send(email, "Money Manage - reimposta la password (reset your password)", """
         Ciao,
 
-        è stato chiesto di reimpostare la password dell'account MoneyManage "%1$s".
+        è stato chiesto di reimpostare la password dell'account Money Manage "%1$s".
         Per sceglierne una nuova apri questo link entro 30 minuti:
 
         %2$s
@@ -115,7 +115,7 @@ public class EmailLinks {
 
         Hi,
 
-        someone asked to reset the password of the MoneyManage account "%1$s".
+        someone asked to reset the password of the Money Manage account "%1$s".
         To choose a new one, open this link within 30 minutes:
 
         %2$s
@@ -123,7 +123,7 @@ public class EmailLinks {
         The link works only once. If it wasn't you, ignore this email: your password stays the same.
 
         --
-        MoneyManage, %3$s
+        Money Manage, %3$s
         Messaggio automatico, le risposte non vengono lette. Automatic message, replies are not read.
         """.formatted(user.get().getUsername(), link, settings.web()));
   }
@@ -161,10 +161,10 @@ public class EmailLinks {
     }
     String token = newToken(user, EmailToken.Purpose.VERIFY, email, VERIFY_TTL);
     String link = settings.web() + "/verify-email#token=" + token;
-    send(email, "MoneyManage - conferma l'email (confirm your email)", """
+    send(email, "Money Manage - conferma l'email (confirm your email)", """
         Ciao,
 
-        questo indirizzo è stato indicato come email dell'account MoneyManage "%1$s".
+        questo indirizzo è stato indicato come email dell'account Money Manage "%1$s".
         Per confermarlo apri questo link entro 24 ore:
 
         %2$s
@@ -176,7 +176,7 @@ public class EmailLinks {
 
         Hi,
 
-        this address was given as the email of the MoneyManage account "%1$s".
+        this address was given as the email of the Money Manage account "%1$s".
         To confirm it, open this link within 24 hours:
 
         %2$s
@@ -185,7 +185,7 @@ public class EmailLinks {
         without confirmation the address is not used.
 
         --
-        MoneyManage, %3$s
+        Money Manage, %3$s
         Messaggio automatico, le risposte non vengono lette. Automatic message, replies are not read.
         """.formatted(user.getUsername(), link, settings.web()));
   }
