@@ -16,8 +16,10 @@ sees only its own data.
   account, the balance of every past day is rebuilt and kept per day
   (`POST /api/banks/transactions/accounts/{account}/balance`, body `{"amountToday": 1234.56}`).
 - **Broker**: Degiro transactions CSV (`POST /api/brokers/transactions/upload`), worth over time from the
-  prices of each ISIN. Prices come from Yahoo Finance (bundled, adapted copy of the
-  [yahoofinance-api](https://github.com/sstrickx/yahoofinance-api) client) and are cached in the database.
+  prices of each ISIN. Weekly prices come from Yahoo Finance (search and chart, browser User-Agent, 5 s timeouts) and
+  are kept in the database: Yahoo is asked only for an ISIN without prices or with prices older than a week, at most
+  once every 6 hours per ISIN (also after a failure), all at once and for at most 3 s per request; a slower download
+  ends in the background and the graph shows what is there. An ISIN Yahoo does not know is left out, not an error.
 - **Real estate**: CRUD with total estimated value.
 - **Monte Carlo**: projection of the portfolio from its historical monthly returns (percentiles P5-P95).
 - **Accounts**: registration and login with a JWT, optional "Accedi con GitHub" (an account is found again only by a

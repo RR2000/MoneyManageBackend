@@ -13,6 +13,8 @@ import java.util.List;
 
 @Hidden
 public interface BrokerTransactionRepository extends JpaRepository<BrokerTransaction, BrokerTransactionId> {
+  List<BrokerTransaction> findByIsinOrderByDatetime(String isin);
+
   @Query("SELECT DISTINCT t.isin FROM BrokerTransaction t")
   List<String> findDistinctIsin();
 
