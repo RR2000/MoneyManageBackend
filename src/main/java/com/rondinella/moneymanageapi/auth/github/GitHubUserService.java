@@ -24,7 +24,8 @@ import java.util.Objects;
 /**
  * "Accedi con GitHub": the GitHub account is mapped to the local account with one of its verified emails, or to a new
  * empty account named after the GitHub login. Unverified emails are ignored (they could be anybody's), and accounts
- * registered with a password have no email, so they are never taken over. The principal's name is the local username.
+ * registered with a password have an email only once its owner confirmed it from a link (EmailLinks), so they are
+ * never taken over. The principal's name is the local username.
  */
 @Service
 public class GitHubUserService implements OAuth2UserService<OAuth2UserRequest, OAuth2User> {

@@ -211,6 +211,17 @@ class SecurityTests {
   }
 
   @Test
+  void withoutSmtpThereIsNoPasswordResetByEmail() throws Exception {
+    mvc.perform(get("/api/auth/providers")).andExpect(jsonPath("$.passwordReset").value(false));
+    mvc.perform(post("/api/auth/password/forgot").contentType(MediaType.APPLICATION_JSON)
+            .content("{\"email\":\"someone@example.com\"}"))
+        .andExpect(status().isNotFound());
+    mvc.perform(post("/api/auth/password/reset").contentType(MediaType.APPLICATION_JSON)
+            .content("{\"token\":\"x\",\"password\":\"password123\"}"))
+        .andExpect(status().isNotFound());
+  }
+
+  @Test
   void wrongPasswordsLockTheUsernameForAWhileExistingOrNot() throws Exception {
     String name = user();
     register(name, false);

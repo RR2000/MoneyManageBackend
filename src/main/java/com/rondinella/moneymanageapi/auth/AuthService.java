@@ -3,6 +3,7 @@ package com.rondinella.moneymanageapi.auth;
 import com.rondinella.moneymanageapi.auth.dto.AuthResponse;
 import com.rondinella.moneymanageapi.auth.dto.LoginRequest;
 import com.rondinella.moneymanageapi.auth.dto.RegisterRequest;
+import com.rondinella.moneymanageapi.auth.mail.EmailLinks;
 import com.rondinella.moneymanageapi.demo.SampleData;
 import com.rondinella.moneymanageapi.tenant.TenantContext;
 import com.rondinella.moneymanageapi.tenant.TenantSchemas;
@@ -30,10 +31,11 @@ public class AuthService {
   private final TenantSchemas tenantSchemas;
   private final SampleData sampleData;
   private final LoginThrottle throttle;
+  private final EmailLinks emailLinks;
 
   public AuthService(UserRepository userRepository, PasswordEncoder passwordEncoder, JwtService jwtService,
                      AuthenticationManager authenticationManager, TenantSchemas tenantSchemas, SampleData sampleData,
-                     LoginThrottle throttle) {
+                     LoginThrottle throttle, EmailLinks emailLinks) {
     this.userRepository = userRepository;
     this.passwordEncoder = passwordEncoder;
     this.jwtService = jwtService;
@@ -41,9 +43,10 @@ public class AuthService {
     this.tenantSchemas = tenantSchemas;
     this.sampleData = sampleData;
     this.throttle = throttle;
+    this.emailLinks = emailLinks;
   }
 
-  public AuthResponse register(RegisterRequest request) {
+  public AuthResponse register(RegisterRequest request, String clientIp) {
     String username = request.getUsername() == null ? "" : request.getUsername().trim();
     if (!USERNAME.matcher(username).matches()) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
@@ -56,11 +59,24 @@ public class AuthService {
     if (request.getPassword().getBytes(java.nio.charset.StandardCharsets.UTF_8).length > 72) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Password: at most 72 bytes");
     }
+    EmailLinks links = emailLinks;
+    String email = links.enabled() ? EmailLinks.normalize(request.getEmail()) : "";
+    if (!email.isEmpty() && !EmailLinks.validEmail(email)) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Email: not a valid address");
+    }
     if (userRepository.findByUsername(username).isPresent()) {
       throw new ResponseStatusException(HttpStatus.CONFLICT, "Username already taken");
     }
     throttle.register();
     User user = createAccount(username, request.getPassword(), null);
+    if (!email.isEmpty()) {
+      // the email is not the account's until its owner opens the link; a refused request does not stop the registration
+      try {
+        links.requestEmailChange(user, email, clientIp);
+      } catch (ResponseStatusException e) {
+        // too many requests from this address: the email can be added later from the account page
+      }
+    }
     if (request.isSampleData()) {
       TenantContext.runAs(TenantContext.schemaOf(user.getId()), () -> {
         sampleData.load();
