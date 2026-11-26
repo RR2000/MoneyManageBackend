@@ -15,6 +15,8 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.regex.Pattern;
 
@@ -64,7 +66,8 @@ public class AuthService {
     if (!email.isEmpty() && !EmailLinks.validEmail(email)) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Email: not a valid address");
     }
-    if (userRepository.findByUsername(username).isPresent()) {
+    // "Mario" and "mario" would be two accounts the login could not tell apart
+    if (userRepository.existsByUsernameIgnoreCase(username)) {
       throw new ResponseStatusException(HttpStatus.CONFLICT, "Username already taken");
     }
     throttle.register();
@@ -103,8 +106,13 @@ public class AuthService {
     return jwtService.generateToken(username);
   }
 
+  /**
+   * Login with the username (any case) or with the account's confirmed email. Every failure gets the same answer,
+   * and the brake counts per account: username and email of one account share the same 5 attempts.
+   */
   public AuthResponse login(LoginRequest request) {
-    String username = request.getUsername() == null ? "" : request.getUsername();
+    String given = request.getUsername() == null ? "" : request.getUsername().trim();
+    String username = accountUsername(given).orElse(given);
     throttle.checkLogin(username);
     try {
       authenticationManager.authenticate(new UsernamePasswordAuthenticationToken(username, request.getPassword()));
@@ -115,5 +123,22 @@ public class AuthService {
     }
     throttle.loginSucceeded(username);
     return new AuthResponse(jwtService.generateToken(username));
+  }
+
+  /** The username of the account that what was typed in the login form stands for, if any. */
+  Optional<String> accountUsername(String given) {
+    if (given.isEmpty()) {
+      return Optional.empty();
+    }
+    if (given.contains("@")) {
+      // usernames never contain @: it is an email, accounts have one only once confirmed (or verified by GitHub)
+      return userRepository.findByEmail(EmailLinks.normalize(given)).map(User::getUsername);
+    }
+    Optional<User> exact = userRepository.findByUsername(given);
+    if (exact.isPresent()) {
+      return exact.map(User::getUsername);
+    }
+    List<User> sameLetters = userRepository.findAllByUsernameIgnoreCase(given);
+    return sameLetters.size() == 1 ? Optional.of(sameLetters.getFirst().getUsername()) : Optional.empty();
   }
 }

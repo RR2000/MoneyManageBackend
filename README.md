@@ -62,7 +62,11 @@ The database user must be able to create schemas in its database (one schema per
   request); the tests check that two users never see each other's data, endpoint by endpoint.
 - Passwords with BCrypt; login tokens signed HMAC-SHA256, valid 24 hours. "Accedi con GitHub" links only a
   verified email.
-- Login: after 5 wrong passwords a username is refused for 15 minutes (for every username, existing or not);
+- Login with the username (any case: usernames differing only in case cannot be registered) or with the account's
+  confirmed email (also the GitHub one), same answer for every failure. A password reset also gives an account born
+  from "Accedi con GitHub" a password; the mail and the reset page say the username to log in with.
+- Login: after 5 wrong passwords an account is refused for 15 minutes (username and email share the count; also for
+  usernames that do not exist);
   at most 30 registrations every 15 minutes for the whole site. The reverse proxy also limits per address.
 - Errors: unexpected ones answer "Unexpected error" and are logged with the exception class and the endpoint,
   never with their message (it can hold amounts or descriptions); SQL errors are not logged.

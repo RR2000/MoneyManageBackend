@@ -109,6 +109,7 @@ public class EmailLinks {
 
         %2$s
 
+        Poi accedi con lo username "%1$s" (oppure con questa email) e la nuova password.
         Il link vale una volta sola. Se non sei stato tu, ignora questa email: la password resta quella di prima.
 
         ---
@@ -120,6 +121,7 @@ public class EmailLinks {
 
         %2$s
 
+        Then log in with the username "%1$s" (or with this email) and the new password.
         The link works only once. If it wasn't you, ignore this email: your password stays the same.
 
         --
@@ -128,9 +130,13 @@ public class EmailLinks {
         """.formatted(user.get().getUsername(), link, settings.web()));
   }
 
-  /** Sets a new password with a link from {@link #requestReset}; 400 if the link is unknown, used or expired. */
+  /**
+   * Sets a new password with a link from {@link #requestReset}; 400 if the link is unknown, used or expired. Also
+   * for an account born from "Accedi con GitHub", which had no password of its own: from now on it has one.
+   * Returns the username to log in with (the link is the proof, its holder may see it).
+   */
   @Transactional
-  public void resetPassword(String token, String newPassword) {
+  public String resetPassword(String token, String newPassword) {
     requireEnabled();
     validatePassword(newPassword);
     EmailToken used = use(token, EmailToken.Purpose.RESET);
@@ -141,6 +147,7 @@ public class EmailLinks {
     // whoever reset the password may have been locked out by wrong attempts
     loginThrottle.loginSucceeded(user.getUsername());
     log.info("Password reset by email for one account");
+    return user.getUsername();
   }
 
   /**
