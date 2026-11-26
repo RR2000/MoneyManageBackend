@@ -21,7 +21,9 @@ sees only its own data.
 - **Real estate**: CRUD with total estimated value.
 - **Monte Carlo**: projection of the portfolio from its historical monthly returns (percentiles P5-P95).
 - **Accounts**: registration and login with a JWT, optional "Accedi con GitHub" (an account is found again only by a
-  verified GitHub email). Each user has a PostgreSQL schema of their own
+  verified GitHub email), optional "forgot password" by email (`POST /api/auth/password/forgot`, then
+  `/api/auth/password/reset` with the token of the link). The account's email is set from a confirmation link
+  (`POST /api/account/email`, then `/api/auth/email/confirm`), also at registration. Each user has a PostgreSQL schema of their own
   (Hibernate multi-tenancy, schema per user): data never mix.
 
 API docs: `/swagger-ui.html` on the backend, when `MONEY_API_DOCS=true` (on in the local run).
@@ -47,6 +49,10 @@ The database user must be able to create schemas in its database (one schema per
 | `DB_USER` / `DB_PASSWORD` | `money` / empty | credentials |
 | `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | empty (off) | GitHub OAuth App for "Accedi con GitHub", callback `https://<site>/api/login/oauth2/code/github` |
 | `MONEY_JWT_SECRET` | random at every start | HMAC key (>= 32 random characters, otherwise no start) of the login tokens |
+| `SMTP_HOST` / `SMTP_PORT` | empty (off) / `587` | SMTP relay for the emails (STARTTLS required) |
+| `SMTP_USERNAME` / `SMTP_PASSWORD` | empty (off) | SMTP credentials |
+| `MAIL_FROM` | empty (off) | sender address, e.g. `noreply@example.org` (shown as "MoneyManage") |
+| `MONEY_WEB_URL` | empty (off) | public URL of the web app (e.g. `https://money.example.org`): the links in the emails point there |
 | `MONEY_CORS_ORIGINS` | empty (closed) | only for a web app on another origin |
 | `MONEY_API_DOCS` | `false` | `true`: OpenAPI description and Swagger UI on `/v3/api-docs` and `/swagger-ui.html` |
 
@@ -60,6 +66,14 @@ The database user must be able to create schemas in its database (one schema per
   at most 30 registrations every 15 minutes for the whole site. The reverse proxy also limits per address.
 - Errors: unexpected ones answer "Unexpected error" and are logged with the exception class and the endpoint,
   never with their message (it can hold amounts or descriptions); SQL errors are not logged.
+- Password reset by email: on only when all the SMTP variables, `MAIL_FROM` and `MONEY_WEB_URL` are set (otherwise
+  the endpoints answer 404 and the web app hides it). The request always answers 202, whether an account has the
+  email or not, and the mail leaves in the background (same timing). The link holds 32 random bytes, the database
+  keeps only their SHA-256; it works once, for 30 minutes, and a new password voids the other links. At most 10
+  requests per hour per client address (then 429), 3 mails per hour per email and 50 per hour for the site (then
+  nothing is sent, same answer). An email becomes the account's only once confirmed from a link (24 hours), so
+  nobody can attach an address they do not own. Tokens travel in the body and, in the links, in the
+  URL fragment: never in an access log. Emails and tokens are never logged.
 - Uploads up to 10 MB; amounts never travel in a URL (they would end up in the access logs).
 
 ## Image
