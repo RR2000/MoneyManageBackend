@@ -78,8 +78,7 @@ The database user must be able to create schemas in its database (one schema per
 
 ## Image
 
-The CI publishes `ghcr.io/rr2000/money-manage-backend:main` (and `:sha-<commit>`) at every push on `main`;
-during the rename the same tags are also published under the old name `ghcr.io/rr2000/moneymanage-backend`.
+The CI publishes `ghcr.io/rr2000/money-manage-backend:main` (and `:sha-<commit>`) at every push on `main`.
 The web app image (nginx) serves the app and forwards `/api` to the service `api` on port 8080.
 
 ## License
