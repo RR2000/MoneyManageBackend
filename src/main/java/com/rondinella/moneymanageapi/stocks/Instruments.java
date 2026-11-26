@@ -102,13 +102,14 @@ public class Instruments {
         : instrument.map(Instrument::getCurrency).orElse(last == null ? null : last.getCurrency());
     String source = last == null ? "nessuna"
         : StockPrices.CSV.equals(last.getSymbol()) ? "csv"
-        : last.getSymbol().equals(symbol) ? "alphavantage" : "yahoo";
+        : last.getSymbol().equals(symbol) ? "alphavantage"
+        : isin.toUpperCase(Locale.ROOT).startsWith("XX") ? "esempio" : "yahoo";
     String name = instrument.map(Instrument::getName).filter(n -> !n.isBlank())
         .orElseGet(() -> transactions.findByIsinOrderByDatetime(isin).stream().map(BrokerTransaction::getDescription)
             .filter(d -> d != null && !d.isBlank()).findFirst().orElse(""));
     return new View(isin, name, symbol, instrument.map(Instrument::isManual).orElse(false), source,
         quote == null ? null : quote.getCurrencyCode(), SymbolResolver.INVESTMENT_CURRENCY.getCurrencyCode(),
-        warning(quote), last == null ? null : last.getClose(),
+        warning(quote) || (quote == null && last != null), last == null ? null : last.getClose(),
         last == null ? null : last.getDatetime().toLocalDateTime().toLocalDate(), stocks.countByIsin(isin));
   }
 
@@ -210,7 +211,7 @@ public class Instruments {
       }
       Stock last = weekly.getLast();
       Preview preview = new Preview(match == null ? symbol : match.symbol(), match == null ? "" : match.name(),
-          currency == null ? null : currency.getCurrencyCode(), warning(currency), last.getClose(),
+          currency == null ? null : currency.getCurrencyCode(), currency == null || warning(currency), last.getClose(),
           last.getDatetime().toLocalDateTime().toLocalDate(), weekly.size());
       Fetched fetched = new Fetched(preview, currency, weekly, clock.instant());
       previews.put(key, fetched);
