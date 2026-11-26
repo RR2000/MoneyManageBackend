@@ -47,10 +47,10 @@ public class EmailLinksController {
     return ResponseEntity.accepted().build();
   }
 
-  @PostMapping("/api/auth/password/reset")
-  public ResponseEntity<Void> reset(@RequestBody ResetRequest request) {
-    links.resetPassword(request.token(), request.password());
-    return ResponseEntity.noContent().build();
+  /** The new password; the answer says the username to log in with (or the account's email). */
+  @PostMapping(path = "/api/auth/password/reset", produces = "application/json")
+  public Map<String, String> reset(@RequestBody ResetRequest request) {
+    return Map.of("username", links.resetPassword(request.token(), request.password()));
   }
 
   /** The link of the confirmation email: it works without being logged in (the token is the proof). */

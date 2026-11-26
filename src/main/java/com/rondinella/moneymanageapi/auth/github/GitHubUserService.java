@@ -78,7 +78,7 @@ public class GitHubUserService implements OAuth2UserService<OAuth2UserRequest, O
     if (base.length() < 3) base = "github-" + base;
     if (base.length() > 26) base = base.substring(0, 26);
     String candidate = base;
-    for (int i = 1; users.findByUsername(candidate).isPresent(); i++) {
+    for (int i = 1; users.existsByUsernameIgnoreCase(candidate); i++) {
       candidate = base + "-gh" + (i == 1 ? "" : i);
     }
     return candidate;

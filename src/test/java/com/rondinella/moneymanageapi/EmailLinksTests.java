@@ -4,6 +4,8 @@ import com.rondinella.moneymanageapi.auth.User;
 import com.rondinella.moneymanageapi.auth.UserRepository;
 import com.rondinella.moneymanageapi.auth.mail.EmailLinks;
 import com.rondinella.moneymanageapi.auth.mail.Mailer;
+import com.rondinella.moneymanageapi.auth.github.GitHubUserService;
+import com.rondinella.moneymanageapi.auth.github.GitHubUserService.GitHubEmail;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.ArgumentMatchers;
@@ -52,6 +54,8 @@ class EmailLinksTests {
   UserRepository users;
   @Autowired
   JdbcTemplate jdbc;
+  @Autowired
+  GitHubUserService gitHubUsers;
   @MockitoBean
   Mailer mailer;
 
@@ -149,7 +153,7 @@ class EmailLinksTests {
     assertFalse(stored.contains(token));
 
     reset(token, "short").andExpect(status().isBadRequest());
-    reset(token, "new-password-1").andExpect(status().isNoContent());
+    reset(token, "new-password-1").andExpect(status().isOk()).andExpect(jsonPath("$.username").value(username));
     login(username, "new-password-1").andExpect(status().isOk());
     login(username, "password123").andExpect(status().isUnauthorized());
 
@@ -186,7 +190,7 @@ class EmailLinksTests {
       return m.group(1);
     }).toList();
     assertNotEquals(links.get(0), links.get(1));
-    reset(links.get(1), "new-password-1").andExpect(status().isNoContent());
+    reset(links.get(1), "new-password-1").andExpect(status().isOk());
     reset(links.get(0), "new-password-2").andExpect(status().isBadRequest());
   }
 
@@ -271,5 +275,86 @@ class EmailLinksTests {
     mvc.perform(get("/api/account")).andExpect(status().isUnauthorized());
     mvc.perform(post("/api/account/email").contentType(MediaType.APPLICATION_JSON).content("{\"email\":\"a@example.com\"}"))
         .andExpect(status().isUnauthorized());
+  }
+
+  @Test
+  void anAccountFromGitHubGetsAPasswordByEmailAndLogsInWithUsernameOrEmail() throws Exception {
+    String email = name() + "@example.com";
+    String gitHubLogin = "Gh" + name();
+    String username = gitHubUsers.toLocalUser(List.of(new GitHubEmail(email, true, true)), gitHubLogin).getName();
+    assertEquals(gitHubLogin, username);
+    // born without a password of its own: nothing to guess
+    login(username, "password123").andExpect(status().isUnauthorized());
+
+    forgot(email, ip()).andExpect(status().isAccepted());
+    ArgumentCaptor<String> text = ArgumentCaptor.forClass(String.class);
+    verify(mailer, timeout(5000)).send(eq(email), anyString(), text.capture());
+    assertThat(text.getValue(), containsString("accedi con lo username \"" + username + "\" (oppure con questa email)"));
+    Matcher m = RESET_LINK.matcher(text.getValue());
+    assertTrue(m.find());
+    reset(m.group(1), "new-password-1").andExpect(status().isOk()).andExpect(jsonPath("$.username").value(username));
+
+    login(username, "new-password-1").andExpect(status().isOk());
+    login(username.toLowerCase(), "new-password-1").andExpect(status().isOk());
+    login("  " + username.toUpperCase() + " ", "new-password-1").andExpect(status().isOk());
+    login(email, "new-password-1").andExpect(status().isOk());
+    login(email.toUpperCase(), "new-password-1").andExpect(status().isOk());
+    // the token is the account's: same data whatever was typed
+    String json = login(email, "new-password-1").andReturn().getResponse().getContentAsString();
+    Matcher token = TOKEN.matcher(json);
+    assertTrue(token.find());
+    mvc.perform(get("/api/account").header("Authorization", "Bearer " + token.group(1)))
+        .andExpect(jsonPath("$.username").value(username));
+    // and "Accedi con GitHub" still finds the same account
+    assertEquals(username, gitHubUsers.toLocalUser(List.of(new GitHubEmail(email, true, true)), gitHubLogin).getName());
+  }
+
+  @Test
+  void everyWrongLoginGetsTheSameAnswer() throws Exception {
+    String email = name() + "@example.com";
+    String username = accountWithEmail(name(), email);
+    List<String[]> wrong = List.of(
+        new String[]{username, "wrong-password"},
+        new String[]{email, "wrong-password"},
+        new String[]{name(), "password123"},
+        new String[]{name() + "@example.com", "password123"},
+        new String[]{"", "password123"});
+    String first = null;
+    for (String[] attempt : wrong) {
+      String body = login(attempt[0], attempt[1]).andExpect(status().isUnauthorized())
+          .andReturn().getResponse().getContentAsString();
+      if (first == null) {
+        first = body;
+      }
+      assertEquals(first, body);
+    }
+  }
+
+  @Test
+  void usernameAndEmailShareTheFiveAttempts() throws Exception {
+    String email = name() + "@example.com";
+    String username = accountWithEmail(name(), email);
+    for (int i = 0; i < 3; i++) {
+      login(email, "wrong-password").andExpect(status().isUnauthorized());
+    }
+    login(username.toUpperCase(), "wrong-password").andExpect(status().isUnauthorized());
+    login(username, "wrong-password").andExpect(status().isUnauthorized());
+    // five wrong passwords, through email and username: locked either way, even with the right password
+    login(username, "password123").andExpect(status().isTooManyRequests());
+    login(email, "password123").andExpect(status().isTooManyRequests());
+
+    // a reset by email unlocks it
+    forgot(email, ip()).andExpect(status().isAccepted());
+    reset(mailedToken(email, RESET_LINK), "new-password-1").andExpect(status().isOk());
+    login(email, "new-password-1").andExpect(status().isOk());
+  }
+
+  @Test
+  void usernamesDifferingOnlyInCaseAreOneAccount() throws Exception {
+    String username = name();
+    register(username, null);
+    mvc.perform(post("/api/auth/register").header("X-Real-IP", ip()).contentType(MediaType.APPLICATION_JSON)
+            .content("{\"username\":\"" + username.toUpperCase() + "\",\"password\":\"password123\"}"))
+        .andExpect(status().isConflict());
   }
 }
