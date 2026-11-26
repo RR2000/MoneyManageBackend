@@ -19,6 +19,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
@@ -29,22 +30,28 @@ import java.util.concurrent.TimeoutException;
 
 /**
  * Prices of the ISINs of the user, kept in their schema (table stock): the graphs read them from the database.
- * Yahoo is asked only when an ISIN has no price yet or its last one is older than {@link #STALE_AFTER}, at most once
- * every {@link #RETRY_AFTER} per ISIN (also when it fails, so an ISIN Yahoo does not know costs nothing on the next
- * opening), all the ISINs at the same time and for at most {@code app.prices.wait-ms} (3 s) per request: a slow download finishes in the
- * background and the graph shows what is already there.
+ * The market is asked only when an ISIN has no price yet or its last one is older than {@link #STALE_AFTER}, at most
+ * once every {@link #RETRY_AFTER} per ISIN (also when it fails), all the ISINs at the same time and for at most
+ * {@code app.prices.wait-ms} (3 s) per request: a slow download finishes in the background and the graph shows what
+ * is already there. Sources in order: Alpha Vantage (symbol from {@link SymbolResolver}), then Yahoo; prices can also
+ * be imported from a CSV ({@link #CSV}).
  */
 @Service
 public class StockPrices {
 
   static final Duration STALE_AFTER = Duration.ofDays(7);
-  static final Duration RETRY_AFTER = Duration.ofHours(6);
+  static final Duration RETRY_AFTER = Duration.ofHours(24);
+  /** symbol of the prices imported from a CSV */
+  public static final String CSV = "CSV";
   /** made-up ISINs (sample data): no market has them */
   private static final String MADE_UP = "XX";
 
   private static final Logger log = LoggerFactory.getLogger(StockPrices.class);
 
   private final StockRepository stocks;
+  private final InstrumentRepository instruments;
+  private final SymbolResolver resolver;
+  private final AlphaVantage alphaVantage;
   private final YahooPrices yahoo;
   private final TransactionTemplate transaction;
   private final Clock clock;
@@ -59,12 +66,16 @@ public class StockPrices {
   @PersistenceContext
   private EntityManager entityManager;
 
-  public StockPrices(StockRepository stocks, YahooPrices yahoo, PlatformTransactionManager transactions,
+  public StockPrices(StockRepository stocks, InstrumentRepository instruments, SymbolResolver resolver,
+                     AlphaVantage alphaVantage, YahooPrices yahoo, PlatformTransactionManager transactions,
                      @Value("${app.prices.wait-ms:3000}") long waitMillis) {
-    this.wait = Duration.ofMillis(waitMillis);
     this.stocks = stocks;
+    this.instruments = instruments;
+    this.resolver = resolver;
+    this.alphaVantage = alphaVantage;
     this.yahoo = yahoo;
     this.transaction = new TransactionTemplate(transactions);
+    this.wait = Duration.ofMillis(waitMillis);
     this.clock = Clock.systemUTC();
   }
 
@@ -73,9 +84,16 @@ public class StockPrices {
     downloads.shutdownNow();
   }
 
-  /** Weekly prices of the ISIN between the two dates, oldest first, from the database. */
+  /**
+   * Weekly prices of the ISIN between the two dates, oldest first, from the database. When the ISIN has a symbol
+   * with prices, only those (and the imported ones): older prices from another source can be in another currency.
+   */
   public List<Stock> between(String isin, Timestamp from, Timestamp to) {
-    return stocks.findAllByIsinAndDatetimeBetweenOrderByDatetime(isin, from, to);
+    Optional<String> symbol = instruments.findById(isin).map(Instrument::getSymbol)
+        .filter(s -> stocks.existsByIsinAndSymbol(isin, s));
+    return symbol.isPresent()
+        ? stocks.findAllByIsinAndSymbolInAndDatetimeBetweenOrderByDatetime(isin, List.of(symbol.get(), CSV), from, to)
+        : stocks.findAllByIsinAndDatetimeBetweenOrderByDatetime(isin, from, to);
   }
 
   /** Downloads what is missing or old for these ISINs, waiting at most {@code app.prices.wait-ms}. */
@@ -101,7 +119,7 @@ public class StockPrices {
         continue;
       }
       jobs.add(CompletableFuture.runAsync(() -> TenantContext.runAs(schema, () -> {
-        download(isin, latest);
+        download(isin);
         return null;
       }), downloads));
     }
@@ -119,20 +137,50 @@ public class StockPrices {
     }
   }
 
-  private void download(String isin, Timestamp latest) {
+  /** The next refresh asks the market again for this ISIN (after its symbol changed). */
+  public void forget(String isin) {
+    lastAsked.remove(TenantContext.current() + "/" + isin);
+  }
+
+  private void download(String isin) {
+    if (alphaVantage.enabled()) {
+      try {
+        Optional<Instrument> instrument = resolver.resolve(isin);
+        if (instrument.isPresent()) {
+          String symbol = instrument.get().getSymbol();
+          save(isin, symbol, alphaVantage.weekly(symbol, isin, instrument.get().getCurrency()));
+          return;
+        }
+      } catch (Exception e) {
+        // Alpha Vantage down, over the limit or without this ISIN: Yahoo may still have it (no ISIN in the logs)
+        log.warn("Prices not downloaded from Alpha Vantage: {}", e.getMessage());
+      }
+    }
     try {
       YahooPrices.Prices prices = yahoo.weekly(isin);
-      List<Stock> fresh = prices.weekly().stream()
-          .filter(s -> latest == null || s.getDatetime().after(latest))
-          .toList();
-      transaction.executeWithoutResult(status -> {
-        for (Stock s : fresh) {
-          entityManager.persist(s);
-        }
-      });
+      save(isin, prices.symbol(), prices.weekly());
     } catch (Exception e) {
-      // Yahoo down, slow or without this ISIN: the graph keeps the prices already stored (no ISIN in the logs)
       log.warn("Prices not downloaded: {}", e.getMessage());
     }
+  }
+
+  /**
+   * Keeps the downloaded prices of one symbol: the weeks after the last stored one, and the last stored week again
+   * (it may have been an unfinished week, whose price has changed since).
+   */
+  public void save(String isin, String symbol, List<Stock> weekly) {
+    Timestamp latest = stocks.latestDatetime(isin, symbol);
+    Timestamp from = latest == null ? null : Timestamp.from(latest.toInstant().minus(Duration.ofDays(7)));
+    transaction.executeWithoutResult(status -> {
+      if (from != null) {
+        stocks.deleteFrom(isin, symbol, from);
+      }
+      for (Stock s : weekly) {
+        if (from == null || !s.getDatetime().before(from)) {
+          entityManager.persist(new Stock(symbol, isin, s.getDatetime(), s.getOpen(), s.getLow(), s.getHigh(),
+              s.getClose(), s.getCurrency(), s.getVolume()));
+        }
+      }
+    });
   }
 }
