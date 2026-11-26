@@ -1,4 +1,4 @@
-# MoneyManage - backend
+# Money Manage - backend
 
 Personal finance dashboard: bank and broker movements imported from the banks' export files, balances over
 time, a portfolio graph, real estate, and a Monte Carlo projection of the portfolio.
@@ -51,7 +51,7 @@ The database user must be able to create schemas in its database (one schema per
 | `MONEY_JWT_SECRET` | random at every start | HMAC key (>= 32 random characters, otherwise no start) of the login tokens |
 | `SMTP_HOST` / `SMTP_PORT` | empty (off) / `587` | SMTP relay for the emails (STARTTLS required) |
 | `SMTP_USERNAME` / `SMTP_PASSWORD` | empty (off) | SMTP credentials |
-| `MAIL_FROM` | empty (off) | sender address, e.g. `noreply@example.org` (shown as "MoneyManage") |
+| `MAIL_FROM` | empty (off) | sender address, e.g. `noreply@example.org` (shown as "Money Manage") |
 | `MONEY_WEB_URL` | empty (off) | public URL of the web app (e.g. `https://money.example.org`): the links in the emails point there |
 | `MONEY_CORS_ORIGINS` | empty (closed) | only for a web app on another origin |
 | `MONEY_API_DOCS` | `false` | `true`: OpenAPI description and Swagger UI on `/v3/api-docs` and `/swagger-ui.html` |

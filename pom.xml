@@ -11,9 +11,9 @@
   </parent>
 
   <groupId>com.rondinella</groupId>
-  <artifactId>moneymanage</artifactId>
+  <artifactId>money-manage-backend</artifactId>
   <version>1.0.0</version>
-  <name>MoneyManage</name>
+  <name>money-manage-backend</name>
   <description>Personal finance dashboard: bank and broker transactions, real estate, Monte Carlo projection</description>
 
   <properties>
