@@ -3,7 +3,7 @@
 Personal finance dashboard: bank and broker movements imported from the banks' export files, balances over
 time, a portfolio graph, real estate, and a Monte Carlo projection of the portfolio.
 This is the REST API (Spring Boot); the web app is in
-[MoneyManageFrontend](https://github.com/RR2000/MoneyManageFrontend).
+[money-manage-app](https://github.com/RR2000/money-manage-app).
 
 Demo: https://money.raoulrondinella.dev - register with any username; tick "sample data" to start with a
 made-up year of movements, or leave it empty and upload your own files (or "Accedi con GitHub"). Every account
@@ -78,7 +78,8 @@ The database user must be able to create schemas in its database (one schema per
 
 ## Image
 
-The CI publishes `ghcr.io/rr2000/moneymanage-backend:main` (and `:sha-<commit>`) at every push on `main`.
+The CI publishes `ghcr.io/rr2000/money-manage-backend:main` (and `:sha-<commit>`) at every push on `main`;
+during the rename the same tags are also published under the old name `ghcr.io/rr2000/moneymanage-backend`.
 The web app image (nginx) serves the app and forwards `/api` to the service `api` on port 8080.
 
 ## License
