@@ -3,10 +3,10 @@ package com.rondinella.moneymanageapi.brokertransactions;
 import com.rondinella.moneymanageapi.banktransactions.BankTransactionService;
 import com.rondinella.moneymanageapi.common.Utils;
 import com.rondinella.moneymanageapi.common.dtos.GraphPointsDto;
-import com.rondinella.moneymanageapi.common.marketdata.Interval;
 import com.rondinella.moneymanageapi.common.marketdata.MarketData;
 import com.rondinella.moneymanageapi.stocks.ParentStock;
 import com.rondinella.moneymanageapi.stocks.Stock;
+import com.rondinella.moneymanageapi.stocks.StockPrices;
 import lombok.SneakyThrows;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -15,7 +15,6 @@ import org.springframework.web.server.ResponseStatusException;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.sql.Timestamp;
-import java.util.Calendar;
 import java.util.Currency;
 import java.util.List;
 import java.util.Map;
@@ -33,10 +32,14 @@ public class BrokerTransactionService {
   BrokerTransactionRepository brokerTransactionRepository;
   final
   BankTransactionService bankTransactionService;
+  final
+  StockPrices stockPrices;
   BrokerTransactionMapper brokerTransactionMapper = BrokerTransactionMapper.INSTANCE;
 
-  public BrokerTransactionService(BrokerTransactionRepository brokerTransactionRepository, BankTransactionService bankTransactionService, MarketData marketData) {
+  public BrokerTransactionService(BrokerTransactionRepository brokerTransactionRepository, BankTransactionService bankTransactionService,
+                                  MarketData marketData, StockPrices stockPrices) {
     this.brokerTransactionRepository = brokerTransactionRepository;
+    this.stockPrices = stockPrices;
     this.bankTransactionService = bankTransactionService;
     this.marketData = marketData;
   }
@@ -45,26 +48,32 @@ public class BrokerTransactionService {
     return brokerTransactionRepository.findDistinctIsin();
   }
 
-  @SneakyThrows
+  /**
+   * Monthly value of every ISIN (price times the quantity held that day) and their total, plus the deposits on the
+   * Degiro account. Prices come from the database ({@link StockPrices}), the quantities from one read of the
+   * transactions of each ISIN: no query per point.
+   */
   public GraphPointsDto worthGraph(Timestamp fromTimestamp, Timestamp toTimestamp) {
     Utils.requireSaneRange(fromTimestamp, toTimestamp);
     GraphPointsDto result = new GraphPointsDto();
-
-    Calendar from = Utils.toCalendar(fromTimestamp);
-    Calendar to = Utils.toCalendar(toTimestamp);
-    Interval interval = Interval.MONTHLY;
     List<String> isinList = findAllIsin();
+    stockPrices.refresh(isinList);
 
     for (String isin : isinList) {
-      ParentStock parentStock = marketData.get(isin, from, to, interval);
+      List<BrokerTransaction> transactions = brokerTransactionRepository.findByIsinOrderByDatetime(isin);
+      int next = 0;
+      BigDecimal totalQuantity = BigDecimal.ZERO;
       boolean bought = false;
-      for (Stock quote : parentStock.getHistory()) {
+      for (Stock quote : stockPrices.between(isin, fromTimestamp, toTimestamp)) {
         String dateString = Utils.convertDateToString(quote.getDatetime());
         Timestamp dateTimestamp = Utils.stringToTimestamp(dateString);
-        BigDecimal totalQuantity = brokerTransactionRepository.totalQuantityByIsinGreaterThan(isin, dateTimestamp);
+        // quantity held at the start of that day: the transactions until then
+        while (next < transactions.size() && !transactions.get(next).getDatetime().after(dateTimestamp)) {
+          totalQuantity = totalQuantity.add(transactions.get(next).getQuantity());
+          next++;
+        }
         if (quote.getClose() != null && (totalQuantity.compareTo(BigDecimal.ZERO) > 0 || bought)) {
-          BigDecimal value = quote.getClose().multiply(totalQuantity);
-          result.addPoint(isin, dateString, value);
+          result.addPoint(isin, dateString, quote.getClose().multiply(totalQuantity));
           bought = true;
         }
       }
