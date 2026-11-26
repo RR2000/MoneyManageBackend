@@ -16,10 +16,16 @@ sees only its own data.
   account, the balance of every past day is rebuilt and kept per day
   (`POST /api/banks/transactions/accounts/{account}/balance`, body `{"amountToday": 1234.56}`).
 - **Broker**: Degiro transactions CSV (`POST /api/brokers/transactions/upload`), worth over time from the
-  prices of each ISIN. Weekly prices come from Yahoo Finance (search and chart, browser User-Agent, 5 s timeouts) and
-  are kept in the database: Yahoo is asked only for an ISIN without prices or with prices older than a week, at most
-  once every 6 hours per ISIN (also after a failure), all at once and for at most 3 s per request; a slower download
-  ends in the background and the graph shows what is there. An ISIN Yahoo does not know is left out, not an error.
+  prices of each ISIN. Weekly prices, kept in the database, come from Alpha Vantage (`MONEY_PRICES_API_KEY`, free
+  plan: 25 requests a day and one a second, counted and queued by the backend), with Yahoo Finance as last resort.
+  The Alpha Vantage symbol of an ISIN is found once: listings from OpenFIGI (no key, kept for good for everybody),
+  turned into symbols by exchange (London `.LON`, Amsterdam `.AMS`, XETRA `.DEX`...) and checked with one
+  SYMBOL_SEARCH, preferring a listing in euro. Prices are asked only for an ISIN without prices or with prices older
+  than a week, at most once a day per ISIN (also after a failure), all at once and for at most 3 s per request; a
+  slower download ends in the background and the graph shows what is there. An ISIN without prices is left out, not
+  an error. On the investments page (`/api/instruments`) the symbol can be set by hand after a preview of its last
+  price, a quote currency other than the euro is flagged (never converted), and prices can be imported from a CSV
+  (`date,price` per line).
 - **Real estate**: CRUD with total estimated value.
 - **Monte Carlo**: projection of the portfolio from its historical monthly returns (percentiles P5-P95).
 - **Accounts**: registration and login with a JWT, optional "Accedi con GitHub" (an account is found again only by a
@@ -51,6 +57,7 @@ The database user must be able to create schemas in its database (one schema per
 | `DB_USER` / `DB_PASSWORD` | `money` / empty | credentials |
 | `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | empty (off) | GitHub OAuth App for "Accedi con GitHub", callback `https://<site>/api/login/oauth2/code/github` |
 | `MONEY_JWT_SECRET` | random at every start | HMAC key (>= 32 random characters, otherwise no start) of the login tokens |
+| `MONEY_PRICES_API_KEY` | empty (Yahoo and CSV only) | Alpha Vantage key for the prices of the investments (free plan) |
 | `SMTP_HOST` / `SMTP_PORT` | empty (off) / `587` | SMTP relay for the emails (STARTTLS required) |
 | `SMTP_USERNAME` / `SMTP_PASSWORD` | empty (off) | SMTP credentials |
 | `MAIL_FROM` | empty (off) | sender address, e.g. `noreply@example.org` (shown as "Money Manage") |
