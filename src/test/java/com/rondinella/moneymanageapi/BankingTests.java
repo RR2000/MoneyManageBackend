@@ -28,11 +28,16 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
+import tools.jackson.databind.node.JsonNodeType;
 
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.net.InetSocketAddress;
+import java.net.URI;
 import java.net.URLDecoder;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
@@ -47,6 +52,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.hamcrest.Matchers.containsString;
@@ -63,7 +69,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * nothing secret in the logs. All the data is made up.
  */
 @SpringBootTest(properties = {
-    "app.banking.app-id=00000000-test-app0-0000-000000000000",
+    "app.banking.app-id=" + BankingTests.APP_ID,
     "app.banking.users=" + BankingTests.ALICE_ID,
     "app.web-url=https://money.example.org",
     "app.mail.host=smtp.example.org", "app.mail.username=user", "app.mail.password=secret",
@@ -74,6 +80,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class BankingTests {
 
   static final long ALICE_ID = 990001;
+  static final String APP_ID = "00000000-test-app0-0000-000000000000";
   static final String SESSION_ID = "sess-5b1c0e7a-fake";
   static final String UID = "uid-0d93-fake";
   static final String IBAN = "IT60X0542811101000000123456";
@@ -94,6 +101,9 @@ class BankingTests {
   static final AtomicReference<String> BALANCES = new AtomicReference<>();
   /** Next error of the data endpoints: status and Enable Banking error code. */
   static final AtomicReference<String[]> ERROR = new AtomicReference<>();
+  /** The application refused (wrong key or app id, app not active): every request is a 401 with only a message. */
+  static final AtomicBoolean APP_REFUSED = new AtomicBoolean();
+  static final String APP_REFUSED_MESSAGE = "Application is not active, see the control panel";
   static final HttpServer SERVER = server();
 
   @Autowired
@@ -154,6 +164,12 @@ class BankingTests {
     ex.getRequestHeaders().forEach((k, v) -> headers.put(k.toLowerCase(), v.getFirst()));
     String body = new String(ex.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
     SEEN.add(new Seen(ex.getRequestMethod(), path, query, headers, body));
+    // like the real one: a JWT it does not accept, or an application it does not know, is a 401 with no error code
+    String refused = APP_REFUSED.get() ? APP_REFUSED_MESSAGE : jwtProblem(headers.get("authorization"));
+    if (refused != null) {
+      reply(ex, 401, "{\"code\":401,\"message\":\"" + refused + "\"}");
+      return;
+    }
     String[] error = ERROR.get();
     if (error != null && path.startsWith("/accounts/")) {
       reply(ex, Integer.parseInt(error[0]), "{\"message\":\"x\",\"code\":" + error[0] + ",\"error\":\"" + error[1] + "\"}");
@@ -195,6 +211,45 @@ class BankingTests {
     }
   }
 
+  /**
+   * What Enable Banking checks of the JWT, null if fine: signed by the application's key, kid = application id,
+   * typ JWT, iss enablebanking.com, aud the string api.enablebanking.com (an array is refused), at most 24 hours.
+   */
+  static String jwtProblem(String authorization) {
+    if (authorization == null || !authorization.startsWith("Bearer ")) {
+      return "JWT is missing";
+    }
+    String token = authorization.substring(7);
+    try {
+      Jwts.parser().verifyWith(KEYS.getPublic()).build().parseSignedClaims(token);
+    } catch (RuntimeException e) {
+      return "JWT signature is not valid";
+    }
+    String[] parts = token.split("\\.");
+    JsonNode header = JSON.readTree(Base64.getUrlDecoder().decode(parts[0]));
+    JsonNode claims = JSON.readTree(Base64.getUrlDecoder().decode(parts[1]));
+    if (!isString(claims.get("aud"), "api.enablebanking.com")) {
+      return "JWT audience is not valid";
+    }
+    if (!isString(claims.get("iss"), "enablebanking.com")) {
+      return "JWT issuer is not valid";
+    }
+    if (!isString(header.get("kid"), APP_ID) || !isString(header.get("typ"), "JWT")) {
+      return "JWT header is not valid";
+    }
+    JsonNode iat = claims.get("iat");
+    JsonNode exp = claims.get("exp");
+    if (iat == null || exp == null || !iat.isNumber() || !exp.isNumber()
+        || exp.asLong() - iat.asLong() > Duration.ofHours(24).toSeconds()) {
+      return "JWT lifetime is not valid";
+    }
+    return null;
+  }
+
+  private static boolean isString(JsonNode node, String value) {
+    return node != null && node.getNodeType() == JsonNodeType.STRING && value.equals(node.asString());
+  }
+
   private static void reply(HttpExchange ex, int status, String body) throws IOException {
     byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
     ex.getResponseHeaders().add("Content-Type", "application/json");
@@ -222,6 +277,7 @@ class BankingTests {
     PAGES.clear();
     BALANCES.set(null);
     ERROR.set(null);
+    APP_REFUSED.set(false);
     if (alice == null) {
       // the enabled user has a fixed id (app.banking.users is read at startup)
       String name = "bank" + UUID.randomUUID().toString().substring(0, 8);
@@ -308,6 +364,43 @@ class BankingTests {
     mvc.perform(post("/api/banking/links").header("Authorization", alice).contentType(MediaType.APPLICATION_JSON)
             .content("{\"aspsp\":\"Nessuna\",\"country\":\"IT\"}"))
         .andExpect(status().isBadRequest()).andExpect(status().reason("UNKNOWN_ASPSP"));
+  }
+
+  @Test
+  void theJwtHasTheAudienceAsAStringAsEnableBankingWants() throws Exception {
+    json(get("/api/banking/aspsps").param("country", "es"));
+    String authorization = seen("/aspsps").getLast().headers().get("authorization");
+    assertNull(jwtProblem(authorization));
+    String[] parts = authorization.substring(7).split("\\.");
+    JsonNode header = JSON.readTree(Base64.getUrlDecoder().decode(parts[0]));
+    JsonNode claims = JSON.readTree(Base64.getUrlDecoder().decode(parts[1]));
+    assertEquals(JsonNodeType.STRING, claims.get("aud").getNodeType(), claims.toString());
+    assertEquals("api.enablebanking.com", claims.get("aud").asString());
+    assertEquals("enablebanking.com", claims.get("iss").asString());
+    assertEquals(APP_ID, header.get("kid").asString());
+    assertEquals("JWT", header.get("typ").asString());
+    assertEquals("RS256", header.get("alg").asString());
+    assertTrue(claims.get("exp").asLong() - claims.get("iat").asLong() <= Duration.ofHours(24).toSeconds());
+
+    // the fake refuses an array audience like the real one (jjwt's audience().add() writes an array)
+    Instant now = Instant.now();
+    String withArray = Jwts.builder().header().add("typ", "JWT").keyId(APP_ID).and()
+        .issuer("enablebanking.com").audience().add("api.enablebanking.com").and()
+        .issuedAt(java.util.Date.from(now)).expiration(java.util.Date.from(now.plusSeconds(3600)))
+        .signWith(KEYS.getPrivate(), Jwts.SIG.RS256).compact();
+    HttpResponse<String> refused = HttpClient.newHttpClient().send(HttpRequest.newBuilder(
+            URI.create("http://127.0.0.1:" + SERVER.getAddress().getPort() + "/aspsps?country=IT"))
+        .header("Authorization", "Bearer " + withArray).build(), HttpResponse.BodyHandlers.ofString());
+    assertEquals(401, refused.statusCode());
+    assertEquals("JWT audience is not valid", JSON.readTree(refused.body()).get("message").asString());
+  }
+
+  @Test
+  void aRefusedApplicationIsHttp401AndItsMessageStaysOutOfTheLogs(CapturedOutput output) throws Exception {
+    APP_REFUSED.set(true);
+    mvc.perform(get("/api/banking/aspsps").param("country", "fr").header("Authorization", alice))
+        .andExpect(status().isBadGateway()).andExpect(status().reason("HTTP_401"));
+    assertThat(output.getAll()).contains("HTTP_401").doesNotContain(APP_REFUSED_MESSAGE);
   }
 
   @Test
