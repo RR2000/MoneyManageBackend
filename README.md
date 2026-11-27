@@ -12,7 +12,9 @@ sees only its own data.
 ## What it does
 
 - **Bank movements**: upload of Revolut and Degiro CSV, Unicredit CSV, Intesa Sanpaolo XLSX
-  (`POST /api/banks/transactions/{bank}/upload`, multipart field `multipartFile`). Given today's balance of an
+  (`POST /api/banks/transactions/{bank}/upload`, multipart field `multipartFile`). Every movement has an id of its
+  own, also two of the same day with the same description; uploading the same file again adds nothing (movements are
+  counted by account, moment and description: the ones already there are updated, only the extra ones added). Given today's balance of an
   account, the balance of every past day is rebuilt and kept per day
   (`POST /api/banks/transactions/accounts/{account}/balance`, body `{"amountToday": 1234.56}`).
 - **Broker**: Degiro transactions CSV (`POST /api/brokers/transactions/upload`), worth over time from the
@@ -26,6 +28,20 @@ sees only its own data.
   an error. On the investments page (`/api/instruments`) the symbol can be set by hand after a preview of its last
   price, a quote currency other than the euro is flagged (never converted), and prices can be imported from a CSV
   (`date,price` per line).
+- **Open banking** (optional, only for the users listed in `MONEY_BANKING_USERS`): movements and balances straight
+  from the bank through [Enable Banking](https://enablebanking.com) (an application in restricted mode, for its owner's
+  own accounts). `GET /api/banking/aspsps?country=IT` lists the banks; `POST /api/banking/links` `{"aspsp","country"}`
+  answers the bank's `url`, where the user gives the consent (as long as the bank allows, e.g. 180 days); the bank
+  sends the browser back to `/api/banking/callback`, which redirects to `/banks?result=ok|error`. `GET /api/banking/links`
+  shows links, accounts (masked IBAN, last balance) and errors as codes; `PUT /api/banking/accounts/{id}`
+  `{"moneyAccount"}` picks the money account of a bank account (an existing one: from the day after its last movement;
+  a new name: as far back as the bank goes); `POST /api/banking/sync` syncs now; `DELETE /api/banking/links/{id}`
+  closes the consent (the movements stay). Syncs at 06:30 and 18:30 (Europe/Rome) from 5 days before the last booked
+  movement; only booked movements, with the bank's id (or a hash of the movement when the bank gives none) so nothing
+  arrives twice, matched to the rows already there from a file (same amount and currency, same day or one day
+  apart; more rows than movements = ambiguous, counted, nothing added); the bank's balance rebuilds the balance history.
+  A rate limit of the bank pauses the link for 6 hours; a consent about to end sends one mail 7 days before (if mail
+  is on and the account has an email). Every movement says where it comes from (`source`: `FILE`, `MANUAL`, `BANK`).
 - **Real estate**: CRUD with total estimated value.
 - **Monte Carlo**: projection of the portfolio from its historical monthly returns (percentiles P5-P95).
 - **Accounts**: registration and login with a JWT, optional "Accedi con GitHub" (an account is found again only by a
@@ -62,6 +78,9 @@ The database user must be able to create schemas in its database (one schema per
 | `SMTP_USERNAME` / `SMTP_PASSWORD` | empty (off) | SMTP credentials |
 | `MAIL_FROM` | empty (off) | sender address, e.g. `noreply@example.org` (shown as "Money Manage") |
 | `MONEY_WEB_URL` | empty (off) | public URL of the web app (e.g. `https://money.example.org`): the links in the emails point there |
+| `MONEY_ENABLEBANKING_APP_ID` | empty (off) | Enable Banking application id (the JWT `kid`); its redirect URLs must include `<MONEY_WEB_URL>/api/banking/callback` |
+| `MONEY_ENABLEBANKING_KEY` | empty (off) | the application's private key: its PEM file in base64 on one line (`base64 -w0 key.pem`) |
+| `MONEY_BANKING_USERS` | empty (off) | ids of the users who may use open banking, comma separated (the others get 404) |
 | `MONEY_CORS_ORIGINS` | empty (closed) | only for a web app on another origin |
 | `MONEY_API_DOCS` | `false` | `true`: OpenAPI description and Swagger UI on `/v3/api-docs` and `/swagger-ui.html` |
 
@@ -88,6 +107,11 @@ The database user must be able to create schemas in its database (one schema per
   nobody can attach an address they do not own. Tokens travel in the body and, in the links, in the
   URL fragment: never in an access log. Emails and tokens are never logged.
 - Uploads up to 10 MB; amounts never travel in a URL (they would end up in the access logs).
+- Open banking: off unless all three variables and `MONEY_WEB_URL` are set, and only for the listed users (404 for
+  the others). The callback has no login: it is tied to a `state` of 32 random bytes, kept only as a SHA-256, valid
+  once and for 10 minutes; it redirects without any code in the URL. The bank session id and the account ids stay in
+  the user's schema and are never returned; only the masked IBAN is kept. The logs hold counts, link ids, Enable
+  Banking's error codes and endpoints, never a body, an id, the code, the state, an IBAN, an amount or a description.
 
 ## Image
 

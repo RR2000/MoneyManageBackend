@@ -211,6 +211,17 @@ class SecurityTests {
   }
 
   @Test
+  void withoutItsSettingsThereIsNoOpenBanking() throws Exception {
+    String auth = register(user(), false);
+    mvc.perform(get("/api/account").header("Authorization", auth)).andExpect(jsonPath("$.banking").value(false));
+    mvc.perform(get("/api/banking/links").header("Authorization", auth)).andExpect(status().isNotFound());
+    mvc.perform(get("/api/banking/aspsps").header("Authorization", auth)).andExpect(status().isNotFound());
+    mvc.perform(post("/api/banking/sync").header("Authorization", auth)).andExpect(status().isNotFound());
+    mvc.perform(get("/api/banking/callback").param("code", "x").param("state", "y"))
+        .andExpect(status().isFound()).andExpect(header().string("Location", "/banks?result=error"));
+  }
+
+  @Test
   void withoutSmtpThereIsNoPasswordResetByEmail() throws Exception {
     mvc.perform(get("/api/auth/providers")).andExpect(jsonPath("$.passwordReset").value(false));
     mvc.perform(post("/api/auth/password/forgot").contentType(MediaType.APPLICATION_JSON)

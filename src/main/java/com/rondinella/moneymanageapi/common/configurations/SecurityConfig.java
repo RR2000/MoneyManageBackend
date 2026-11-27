@@ -3,6 +3,7 @@ package com.rondinella.moneymanageapi.common.configurations;
 import com.rondinella.moneymanageapi.auth.AuthService;
 import com.rondinella.moneymanageapi.auth.github.GitHubLogin;
 import com.rondinella.moneymanageapi.auth.github.GitHubUserService;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.oauth2.client.registration.InMemoryClientRegistrationRepository;
 import org.springframework.security.oauth2.core.user.OAuth2User;
@@ -44,6 +45,8 @@ public class SecurityConfig {
         .csrf(csrf -> csrf.ignoringRequestMatchers("/api/**"))
         .authorizeHttpRequests(auth -> auth
             .requestMatchers("/api/auth/**").permitAll()
+            // the bank sends the browser back without a login: the one-time state says whose it is
+            .requestMatchers(HttpMethod.GET, "/api/banking/callback").permitAll()
             .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
             .requestMatchers("/actuator/health/**").permitAll()
             .requestMatchers("/error").permitAll()

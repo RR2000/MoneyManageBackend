@@ -7,7 +7,7 @@ import java.math.BigDecimal;
 import java.sql.Timestamp;
 
 /**
- * DTO for {@link BankTransaction}
+ * DTO for {@link BankTransaction}. {@code source} (FILE, MANUAL, BANK) is only read: the server sets it.
  */
 @Getter
 @Setter
@@ -21,4 +21,6 @@ public class BankTransactionDto implements Serializable {
   private BigDecimal fee = null;
   private String currency = null;
   private BigDecimal cumulativeAmount = null;
+  private BankTransaction.Source source = null;
+
 }

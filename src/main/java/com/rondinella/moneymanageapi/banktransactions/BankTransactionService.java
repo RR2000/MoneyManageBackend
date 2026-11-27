@@ -42,7 +42,7 @@ public class BankTransactionService {
   }
 
   public List<BankTransactionDto> findTransactionsByAccount(String accountName) {
-    return bankTransactionMapper.toDto(bankTransactionRepository.findTransactionByAccountOrderByDatetime(accountName));
+    return bankTransactionMapper.toDto(bankTransactionRepository.findTransactionByAccountOrderByDatetimeAscIdAsc(accountName));
   }
 
   public List<String> findAllAccounts() {
@@ -50,7 +50,7 @@ public class BankTransactionService {
   }
 
   public boolean computeCumulativeAmount(String account, BigDecimal todayMoney) {
-    List<BankTransaction> bankTransactions = bankTransactionRepository.findTransactionByAccountOrderByDatetimeDesc(account);
+    List<BankTransaction> bankTransactions = bankTransactionRepository.findTransactionByAccountOrderByDatetimeDescIdDesc(account);
     if (bankTransactions.isEmpty()) {
       return false;
     }
@@ -67,7 +67,7 @@ public class BankTransactionService {
     bankTransactionRepository.saveAllAndFlush(bankTransactions);
 
     // Populate daily balance snapshot table
-    List<BankTransaction> ordered = bankTransactionRepository.findTransactionByAccountOrderByDatetime(account);
+    List<BankTransaction> ordered = bankTransactionRepository.findTransactionByAccountOrderByDatetimeAscIdAsc(account);
     Map<LocalDate, BigDecimal> dailyMap = new LinkedHashMap<>();
     for (BankTransaction tx : ordered) {
       LocalDate day = tx.getDatetime().toLocalDateTime().toLocalDate();
@@ -82,7 +82,7 @@ public class BankTransactionService {
 
   /** Balance of the account at the end of that day: the cumulative amount of its last transaction until then. */
   public BigDecimal amountOnThatDay(String accountName, Timestamp thatDay) {
-    BankTransaction last = bankTransactionRepository.findFirstByAccountAndDatetimeLessThanEqualOrderByDatetimeDesc(accountName, thatDay);
+    BankTransaction last = bankTransactionRepository.findFirstByAccountAndDatetimeLessThanEqualOrderByDatetimeDescIdDesc(accountName, thatDay);
     return last == null || last.getCumulativeAmount() == null ? BigDecimal.ZERO : last.getCumulativeAmount();
   }
 
@@ -125,7 +125,7 @@ public class BankTransactionService {
         }
       } else {
         // Fallback: compute from raw transactions
-        List<BankTransaction> bankTransactions = bankTransactionRepository.findByDatetimeBetweenAndAccountOrderByDatetime(startTimestamp, endTimestamp, account);
+        List<BankTransaction> bankTransactions = bankTransactionRepository.findByDatetimeBetweenAndAccountOrderByDatetimeAscIdAsc(startTimestamp, endTimestamp, account);
         for (BankTransaction bankTransaction : bankTransactions) {
           String simpleDate = Utils.convertTimestampToString(bankTransaction.getDatetime());
           points.put(simpleDate, bankTransaction.getCumulativeAmount());
@@ -139,11 +139,61 @@ public class BankTransactionService {
     return result;
   }
 
+  /** Movements typed or sent by the user (source MANUAL). See {@link #addTransactions(List, BankTransaction.Source)}. */
   public List<BankTransactionDto> addTransactions(List<BankTransactionDto> bankTransactionDto) {
-    List<BankTransaction> txToAdd = bankTransactionMapper.toEntity(bankTransactionDto);
-    List<BankTransaction> txAdded = bankTransactionRepository.saveAll(txToAdd);
-    bankTransactionRepository.flush();
-    return bankTransactionMapper.toDto(txAdded);
+    return addTransactions(bankTransactionDto, BankTransaction.Source.MANUAL);
+  }
+
+  /**
+   * Adds movements without doubling what is already there. Movements are compared by account, moment and description,
+   * counting them: if the list has n movements with the same three and the account already has m, the first min(n, m)
+   * existing rows are updated (amount, fee, currency, as before the surrogate key) and only n - m are added. So the same
+   * file imported twice gives the same rows, and two equal movements of the same day in one file are both kept (before,
+   * the second overwrote the first). A row matched to a bank movement keeps its bank id.
+   */
+  public List<BankTransactionDto> addTransactions(List<BankTransactionDto> bankTransactionDto, BankTransaction.Source source) {
+    List<BankTransaction> incoming = bankTransactionMapper.toEntity(bankTransactionDto);
+    Map<String, List<BankTransaction>> byAccount = new LinkedHashMap<>();
+    for (BankTransaction tx : incoming) {
+      if (tx.getAccount() == null || tx.getDatetime() == null || tx.getDescription() == null) {
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "account, datetime and description are required");
+      }
+      tx.setId(null);
+      tx.setExternalRef(null);
+      tx.setSource(source);
+      byAccount.computeIfAbsent(tx.getAccount(), a -> new ArrayList<>()).add(tx);
+    }
+    List<BankTransaction> toSave = new ArrayList<>();
+    byAccount.forEach((account, txs) -> {
+      Timestamp from = txs.stream().map(BankTransaction::getDatetime).min(Comparator.naturalOrder()).orElseThrow();
+      Timestamp to = txs.stream().map(BankTransaction::getDatetime).max(Comparator.naturalOrder()).orElseThrow();
+      Map<List<Object>, Deque<BankTransaction>> existing = new HashMap<>();
+      for (BankTransaction row : bankTransactionRepository.findByAccountAndDatetimeBetweenOrderByIdAsc(account, from, to)) {
+        existing.computeIfAbsent(key(row), k -> new ArrayDeque<>()).add(row);
+      }
+      for (BankTransaction tx : txs) {
+        Deque<BankTransaction> same = existing.get(key(tx));
+        BankTransaction row = same == null ? null : same.poll();
+        if (row == null) {
+          toSave.add(tx);
+        } else {
+          row.setAmount(tx.getAmount());
+          row.setFee(tx.getFee());
+          row.setCurrency(tx.getCurrency());
+          if (tx.getCumulativeAmount() != null) {
+            row.setCumulativeAmount(tx.getCumulativeAmount());
+          }
+          toSave.add(row);
+        }
+      }
+    });
+    List<BankTransaction> saved = bankTransactionRepository.saveAllAndFlush(toSave);
+    return bankTransactionMapper.toDto(saved);
+  }
+
+  private static List<Object> key(BankTransaction tx) {
+    // the same instant whatever the Timestamp subclass or nanos the row was read with
+    return List.of(tx.getDatetime().toInstant(), tx.getDescription());
   }
 
   static {
@@ -246,7 +296,7 @@ public class BankTransactionService {
         case Unicredit -> bankTransactionDtos = unicreditCsv(file);
         default -> throw new RuntimeException("Unsupported bank: " + bankName);
       }
-      return addTransactions(bankTransactionDtos);
+      return addTransactions(bankTransactionDtos, BankTransaction.Source.FILE);
     } catch (Exception e) {
       // unreadable file or a format that does not match the bank: the user's fault, not a server error
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Cannot read the " + bankName + " file: " + e.getMessage(), e);
