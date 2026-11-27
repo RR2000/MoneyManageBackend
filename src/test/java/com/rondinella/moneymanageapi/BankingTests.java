@@ -754,4 +754,247 @@ class BankingTests {
         + ".bank_transaction (account, datetime, description, amount, source, external_ref) VALUES ('A', '2025-01-04', 'w', 1, 'BANK', 'e-1')"));
     jdbc.execute("DROP SCHEMA " + schema + " CASCADE");
   }
+  private void fileRow(String account, String datetime, String description, String amount, String currency) {
+    jdbc.update("INSERT INTO " + SCHEMA + ".bank_transaction (account, datetime, description, amount, fee, currency, "
+        + "source) VALUES (?, ?::timestamp, ?, ?::numeric, 0, ?, 'FILE')", account, datetime, description, amount,
+        currency);
+  }
+
+  private BigDecimal decimal(JsonNode node) {
+    return node == null || node.isNull() ? null : node.decimalValue();
+  }
+
+  private static void assertAmount(String expected, BigDecimal actual) {
+    assertNotNull(actual, "expected " + expected);
+    assertEquals(0, new BigDecimal(expected).compareTo(actual), expected + " != " + actual);
+  }
+
+  @Test
+  void replaceWithTheBankDataShowsWhatChangesThenDoesItOnlyWithTheToken() throws Exception {
+    fileRow("Vecchio", "2026-10-01 10:00", "Riga vecchia finta", "-20.00", "EUR");
+    fileRow("Vecchio", "2026-11-02 10:00", "STIPENDIO DA FILE", "50.00", "EUR");
+    fileRow("Vecchio", "2026-11-05 10:00", "CAFFE A", "-4.10", "EUR");
+    fileRow("Vecchio", "2026-11-05 10:00", "CAFFE B", "-4.10", "EUR");
+    fileRow("Vecchio", "2026-11-05 10:00", "CAFFE C", "-4.10", "EUR");
+    fileRow("Vecchio", "2026-11-06 10:00", "Doppione finto", "-9.99", "EUR");
+    fileRow("Vecchio", "2026-11-07 10:00", "In dollari", "-3.00", "USD");
+    PAGES.put("", page(null,
+        tx("ref-1", "50.00", "CRDT", "2026-11-02", "Stipendio finto"),
+        tx("ref-3", "12.30", "DBIT", "2026-11-03", "Spesa finta"),
+        tx("c-1", "4.10", "DBIT", "2026-11-05", "Caffe finto"),
+        tx("c-2", "4.10", "DBIT", "2026-11-05", "Caffe finto"),
+        tx("ref-4", "100.00", "CRDT", "2026-11-09", "Bonifico finto")));
+    long accountId = link();
+    // an account with rows: the bank's movements arrive from the day after the last row
+    associate(accountId, "Vecchio");
+    assertEquals(8, rows("Vecchio"));
+    JsonNode account = json(get("/api/banking/links")).get(0).get("accounts").get(0);
+    assertEquals("2026-11-09", account.get("bankFrom").asString());
+    assertEquals("2026-10-01", account.get("firstDate").asString());
+    assertEquals(0, account.get("extraRows").asInt());
+    assertEquals(6, account.get("olderRows").asInt(), "the USD row is not counted");
+
+    // the preview reads the whole history and changes nothing
+    SEEN.clear();
+    JsonNode preview = json(post("/api/banking/accounts/" + accountId + "/replace/preview"));
+    Seen read = seen("/accounts/" + UID + "/transactions").getFirst();
+    assertTrue(read.query().contains("strategy=longest"), read.query());
+    assertFalse(read.query().contains("date_from"), read.query());
+    assertEquals("2026-11-02", preview.get("bankFrom").asString());
+    assertEquals(2, preview.get("deleted").asInt(), "the third coffee and the double");
+    assertEquals(1, preview.get("added").asInt());
+    assertEquals(3, preview.get("matched").asInt(), "the salary and two coffees");
+    assertEquals(1, preview.get("otherCurrency").asInt());
+    assertEquals(1, preview.get("older").asInt());
+    assertEquals("EUR", preview.get("currency").asString());
+    assertAmount("1234.56", decimal(preview.get("todayBefore")));
+    assertAmount("1234.56", decimal(preview.get("todayAfter")));
+    assertAmount("1109.85", decimal(preview.get("startBefore")));
+    assertAmount("1108.06", decimal(preview.get("startAfter")));
+    String token = preview.get("token").asString();
+    assertFalse(token.isBlank());
+    assertEquals(8, rows("Vecchio"));
+    assertEquals(1, jdbc.queryForObject("SELECT count(*) FROM " + SCHEMA
+        + ".bank_transaction WHERE external_ref IS NOT NULL", Integer.class));
+    assertEquals(1, jdbc.queryForObject("SELECT count(*) FROM " + SCHEMA
+        + ".daily_balance WHERE account = 'Vecchio' AND date = '2026-11-06'", Integer.class));
+
+    // a wrong token does nothing
+    mvc.perform(post("/api/banking/accounts/" + accountId + "/replace").header("Authorization", alice)
+            .contentType(MediaType.APPLICATION_JSON).content("{\"token\":\"nope\"}"))
+        .andExpect(status().isConflict()).andExpect(status().reason("PREVIEW_EXPIRED"));
+    assertEquals(8, rows("Vecchio"));
+
+    SEEN.clear();
+    JsonNode done = json(post("/api/banking/accounts/" + accountId + "/replace").contentType(MediaType.APPLICATION_JSON)
+        .content("{\"token\":\"" + token + "\"}"));
+    assertTrue(SEEN.isEmpty(), "the movements of the preview, the bank is not asked again");
+    assertTrue(done.get("token").isNull());
+    assertEquals(2, done.get("deleted").asInt());
+    assertEquals(1, done.get("added").asInt());
+    assertAmount("1108.06", decimal(done.get("startAfter")));
+    assertEquals(List.of("Riga vecchia finta", "STIPENDIO DA FILE", "Spesa finta", "CAFFE A", "CAFFE B", "In dollari",
+        "Bonifico finto"), jdbc.queryForList("SELECT description FROM " + SCHEMA
+        + ".bank_transaction WHERE account = 'Vecchio' ORDER BY datetime, id", String.class));
+    assertEquals(0, jdbc.queryForObject("SELECT count(*) FROM " + SCHEMA
+        + ".daily_balance WHERE account = 'Vecchio' AND date = '2026-11-06'", Integer.class),
+        "the day of the deleted row has no balance any more");
+    assertAmount("1108.06", jdbc.queryForObject("SELECT balance FROM " + SCHEMA
+        + ".daily_balance WHERE account = 'Vecchio' AND date = '2026-10-01'", BigDecimal.class));
+    mvc.perform(post("/api/banking/accounts/" + accountId + "/replace").header("Authorization", alice)
+            .contentType(MediaType.APPLICATION_JSON).content("{\"token\":\"" + token + "\"}"))
+        .andExpect(status().isConflict()).andExpect(status().reason("PREVIEW_EXPIRED"));
+
+    account = json(get("/api/banking/links")).get(0).get("accounts").get(0);
+    assertEquals("2026-11-02", account.get("bankFrom").asString());
+    assertEquals(0, account.get("extraRows").asInt());
+    assertEquals(1, account.get("olderRows").asInt());
+
+    // a sync adds nothing: every movement of the bank is there once
+    assertEquals(0, json(post("/api/banking/sync")).get("imported").asInt());
+    assertEquals(7, rows("Vecchio"));
+
+    // the older rows: only with the first day of the bank's history the user saw
+    mvc.perform(post("/api/banking/accounts/" + accountId + "/delete-older").header("Authorization", alice)
+            .contentType(MediaType.APPLICATION_JSON).content("{\"before\":\"2026-11-03\"}"))
+        .andExpect(status().isConflict()).andExpect(status().reason("PREVIEW_EXPIRED"));
+    assertEquals(7, rows("Vecchio"));
+    JsonNode older = json(post("/api/banking/accounts/" + accountId + "/delete-older")
+        .contentType(MediaType.APPLICATION_JSON).content("{\"before\":\"2026-11-02\"}"));
+    assertEquals(1, older.get("deleted").asInt());
+    assertEquals(6, rows("Vecchio"));
+    assertAmount("1234.56", jdbc.queryForObject("SELECT cumulative_amount FROM " + SCHEMA
+        + ".bank_transaction WHERE account = 'Vecchio' ORDER BY datetime DESC, id DESC LIMIT 1", BigDecimal.class));
+    assertEquals(0, jdbc.queryForObject("SELECT count(*) FROM " + SCHEMA
+        + ".daily_balance WHERE account = 'Vecchio' AND date < '2026-11-02'", Integer.class));
+  }
+
+  @Test
+  void replaceNeedsAMoneyAccountAndAnActiveLink() throws Exception {
+    long accountId = link();
+    mvc.perform(post("/api/banking/accounts/" + accountId + "/replace/preview").header("Authorization", alice))
+        .andExpect(status().isConflict()).andExpect(status().reason("NO_MONEY_ACCOUNT"));
+    associate(accountId, "Scaduto");
+    jdbc.update("UPDATE " + SCHEMA + ".bank_link SET status = 'EXPIRED'");
+    mvc.perform(post("/api/banking/accounts/" + accountId + "/replace/preview").header("Authorization", alice))
+        .andExpect(status().isConflict()).andExpect(status().reason("LINK_NOT_ACTIVE"));
+    mvc.perform(post("/api/banking/accounts/999999/replace/preview").header("Authorization", alice))
+        .andExpect(status().isNotFound());
+    String bob = register();
+    mvc.perform(post("/api/banking/accounts/" + accountId + "/replace/preview").header("Authorization", bob))
+        .andExpect(status().isNotFound());
+    mvc.perform(post("/api/banking/accounts/" + accountId + "/replace").header("Authorization", bob)
+        .contentType(MediaType.APPLICATION_JSON).content("{\"token\":\"x\"}")).andExpect(status().isNotFound());
+    mvc.perform(post("/api/banking/accounts/" + accountId + "/delete-older").header("Authorization", bob)
+        .contentType(MediaType.APPLICATION_JSON).content("{\"before\":\"2026-11-02\"}")).andExpect(status().isNotFound());
+  }
+
+  @Test
+  void reconnectingForTheWholeHistoryImportsAtOnceAsFarBackAsTheBankGoes() throws Exception {
+    fileRow("Da_file", "2026-11-03 10:00", "Riga finta", "-7.00", "EUR");
+    fileRow("Da_file", "2026-11-03 11:00", "Riga finta doppia", "-7.00", "EUR");
+    PAGES.put("", page(null, tx("r-old", "7.00", "DBIT", "2026-11-03", "Riga finta"),
+        tx("r-new", "9.00", "DBIT", "2026-11-04", "Nuova finta")));
+    long accountId = link();
+    associate(accountId, "Da_file");
+    assertEquals(3, rows("Da_file"));
+
+    // a plain reconnect goes on from where the import got to
+    SEEN.clear();
+    link();
+    Seen plain = seen("/accounts/" + UID + "/transactions").getFirst();
+    assertTrue(plain.query().contains("date_from=2026-11-04"), plain.query());
+    assertFalse(plain.query().contains("strategy"), plain.query());
+    assertEquals(3, rows("Da_file"));
+
+    // reconnect for the whole history: imported right after the callback, from the oldest day the bank gives
+    SEEN.clear();
+    json(post("/api/banking/links").contentType(MediaType.APPLICATION_JSON)
+        .content("{\"aspsp\":\"Banca Finta\",\"country\":\"IT\",\"fullHistory\":true}"));
+    String state = JSON.readTree(seen("/auth").getLast().body()).get("state").asString();
+    mvc.perform(get("/api/banking/callback").param("code", CODE).param("state", state))
+        .andExpect(header().string("Location", "/banks?result=ok"));
+    bankingService.waitForImports();
+    Seen read = seen("/accounts/" + UID + "/transactions").getFirst();
+    assertTrue(read.query().contains("strategy=longest"), read.query());
+    assertFalse(read.query().contains("date_from"), read.query());
+    assertEquals(3, rows("Da_file"), "two rows, one movement: the bank's goes to the first, nothing added");
+    assertEquals("Riga finta", jdbc.queryForObject("SELECT description FROM " + SCHEMA
+        + ".bank_transaction WHERE external_ref = 'r-old'", String.class));
+    JsonNode link = json(get("/api/banking/links")).get(0);
+    assertEquals(0, link.get("lastAmbiguous").asInt());
+    assertFalse(link.get("createdAt").isNull());
+    JsonNode account = link.get("accounts").get(0);
+    assertEquals("Da_file", account.get("moneyAccount").asString());
+    assertEquals("2026-11-03", account.get("bankFrom").asString());
+    assertEquals(1, account.get("extraRows").asInt(), "the double is what a replace would delete");
+  }
+
+  @Test
+  void moneyAccountsAreListedAndDeletedOnlyWithTheNameTypedAgain() throws Exception {
+    String bob = register();
+    mvc.perform(post("/api/banks/transactions").header("Authorization", bob).contentType(MediaType.APPLICATION_JSON)
+        .content("""
+            [{"account":"Conto vecchio","datetime":"2026-01-10T00:00:00.000+00:00","description":"Riga 1","amount":-2.00,"currency":"EUR"},
+             {"account":"Conto vecchio","datetime":"2026-02-10T00:00:00.000+00:00","description":"Riga 2","amount":5.00,"currency":"EUR"},
+             {"account":"Da tenere","datetime":"2026-03-10T00:00:00.000+00:00","description":"Riga 3","amount":1.00,"currency":"EUR"}]"""))
+        .andExpect(status().isCreated());
+    mvc.perform(post("/api/banks/transactions/accounts/Conto vecchio/balance").header("Authorization", bob)
+        .contentType(MediaType.APPLICATION_JSON).content("{\"amountToday\":100}")).andExpect(status().isOk());
+
+    String list = mvc.perform(get("/api/money-accounts").header("Authorization", bob)).andExpect(status().isOk())
+        .andReturn().getResponse().getContentAsString();
+    JsonNode accounts = JSON.readTree(list);
+    assertEquals(2, accounts.size());
+    JsonNode old = accounts.get(0);
+    assertEquals("Conto vecchio", old.get("name").asString());
+    assertEquals(2, old.get("rows").asInt());
+    assertEquals(2, old.get("manualRows").asInt());
+    assertEquals(0, old.get("fileRows").asInt());
+    assertEquals(0, old.get("bankRows").asInt());
+    assertEquals("2026-01-10", old.get("firstDate").asString());
+    assertEquals("2026-02-10", old.get("lastDate").asString());
+    assertFalse(old.get("linked").asBoolean());
+
+    for (String confirm : List.of("conto vecchio", "Conto vecchio ", "")) {
+      mvc.perform(post("/api/money-accounts/delete").header("Authorization", bob).contentType(MediaType.APPLICATION_JSON)
+              .content("{\"name\":\"Conto vecchio\",\"confirm\":\"" + confirm + "\"}"))
+          .andExpect(status().isBadRequest()).andExpect(status().reason("CONFIRMATION_MISMATCH"));
+    }
+    mvc.perform(post("/api/money-accounts/delete").header("Authorization", bob).contentType(MediaType.APPLICATION_JSON)
+            .content("{\"name\":\"Conto vecchio\",\"confirm\":\"Conto vecchio\"}"))
+        .andExpect(status().isOk()).andExpect(jsonPath("$.rows").value(2));
+    mvc.perform(get("/api/money-accounts").header("Authorization", bob))
+        .andExpect(jsonPath("$.length()").value(1)).andExpect(jsonPath("$[0].name").value("Da tenere"));
+    mvc.perform(get("/api/banks/transactions/daily-balance/Conto vecchio").header("Authorization", bob))
+        .andExpect(jsonPath("$.length()").value(0));
+    mvc.perform(post("/api/money-accounts/delete").header("Authorization", bob).contentType(MediaType.APPLICATION_JSON)
+            .content("{\"name\":\"Conto vecchio\",\"confirm\":\"Conto vecchio\"}"))
+        .andExpect(status().isNotFound()).andExpect(status().reason("ACCOUNT_NOT_FOUND"));
+    // somebody else's account with the same name is not there for alice
+    mvc.perform(post("/api/money-accounts/delete").header("Authorization", alice).contentType(MediaType.APPLICATION_JSON)
+            .content("{\"name\":\"Da tenere\",\"confirm\":\"Da tenere\"}"))
+        .andExpect(status().isNotFound());
+    mvc.perform(get("/api/money-accounts")).andExpect(status().isUnauthorized());
+  }
+
+  @Test
+  void aMoneyAccountWhereABankImportsIsNotDeletedUntilItIsUnlinked() throws Exception {
+    PAGES.put("", page(null, tx("l-1", "5.00", "DBIT", "2026-11-02", "Riga finta")));
+    long accountId = link();
+    associate(accountId, "Collegato");
+    mvc.perform(get("/api/money-accounts").header("Authorization", alice))
+        .andExpect(jsonPath("$[?(@.name == 'Collegato')].linked").value(true))
+        .andExpect(jsonPath("$[?(@.name == 'Collegato')].bankRows").value(1));
+    mvc.perform(post("/api/money-accounts/delete").header("Authorization", alice).contentType(MediaType.APPLICATION_JSON)
+            .content("{\"name\":\"Collegato\",\"confirm\":\"Collegato\"}"))
+        .andExpect(status().isConflict()).andExpect(status().reason("ACCOUNT_LINKED"));
+    assertEquals(1, rows("Collegato"));
+    long linkId = jdbc.queryForObject("SELECT id FROM " + SCHEMA + ".bank_link", Long.class);
+    mvc.perform(delete("/api/banking/links/" + linkId).header("Authorization", alice)).andExpect(status().isNoContent());
+    mvc.perform(post("/api/money-accounts/delete").header("Authorization", alice).contentType(MediaType.APPLICATION_JSON)
+            .content("{\"name\":\"Collegato\",\"confirm\":\"Collegato\"}"))
+        .andExpect(status().isOk()).andExpect(jsonPath("$.rows").value(1));
+    assertEquals(0, rows("Collegato"));
+  }
 }
