@@ -2,7 +2,9 @@ package com.rondinella.moneymanageapi.banktransactions;
 
 import io.swagger.v3.oas.annotations.Hidden;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.sql.Timestamp;
@@ -31,6 +33,27 @@ public interface BankTransactionRepository extends JpaRepository<BankTransaction
 
   @Query("SELECT t.externalRef FROM BankTransaction t WHERE t.account = :account AND t.externalRef IS NOT NULL")
   List<String> findExternalRefs(String account);
+
+  /** The oldest movement of the account that the bank knows (a row of the bank, or a row matched to one). */
+  @Query("SELECT min(t.datetime) FROM BankTransaction t WHERE t.account = :account AND t.externalRef IS NOT NULL")
+  Timestamp findBankFrom(String account);
+
+  @Query("SELECT min(t.datetime) FROM BankTransaction t WHERE t.account = :account")
+  Timestamp findFirstDatetime(String account);
+
+  /** Rows from a file or typed in that no movement of the bank was matched to. */
+  List<BankTransaction> findByAccountAndExternalRefIsNullAndSourceNotOrderByDatetimeAscIdAsc(String account,
+                                                                                            BankTransaction.Source source);
+
+  /** Rows of every account by source: how many, first and last moment. */
+  @Query("SELECT t.account, t.source, count(t), min(t.datetime), max(t.datetime) FROM BankTransaction t "
+      + "GROUP BY t.account, t.source")
+  List<Object[]> countByAccountAndSource();
+
+  @Transactional
+  @Modifying(flushAutomatically = true, clearAutomatically = true)
+  @Query("DELETE FROM BankTransaction t WHERE t.account = :account")
+  int deleteAllOfAccount(String account);
 
   List<BankTransaction> findByDatetimeBetweenAndAccount(Timestamp startTimestamp, Timestamp endTimestamp, String account);
 

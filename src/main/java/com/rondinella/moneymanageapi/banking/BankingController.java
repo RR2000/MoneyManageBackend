@@ -34,7 +34,14 @@ import java.util.Map;
 @RequestMapping(path = "/api/banking", produces = "application/json")
 public class BankingController {
 
-  public record LinkRequest(String aspsp, String country) {
+  /** fullHistory: "reconnect and import the whole history" (see BankingService#startLink). */
+  public record LinkRequest(String aspsp, String country, Boolean fullHistory) {
+  }
+
+  public record ReplaceRequest(String token) {
+  }
+
+  public record DeleteOlderRequest(java.time.LocalDate before) {
   }
 
   public record MoneyAccountRequest(String moneyAccount) {
@@ -63,7 +70,8 @@ public class BankingController {
     if (body == null) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "UNKNOWN_ASPSP");
     }
-    return Map.of("url", banking.startLink(user.getId(), body.aspsp(), body.country(), psu(request)));
+    return Map.of("url", banking.startLink(user.getId(), body.aspsp(), body.country(), psu(request),
+        Boolean.TRUE.equals(body.fullHistory())));
   }
 
   /**
@@ -97,6 +105,30 @@ public class BankingController {
                                                     HttpServletRequest request) {
     enabledUser(principal);
     return banking.setMoneyAccount(id, body == null ? null : body.moneyAccount(), psu(request));
+  }
+
+  /** Preview of "replace with the bank's data": reads the bank, changes nothing, answers the counts and a token. */
+  @PostMapping("/accounts/{id}/replace/preview")
+  public BankingService.Replace replacePreview(@AuthenticationPrincipal UserDetails principal, @PathVariable long id,
+                                               HttpServletRequest request) {
+    enabledUser(principal);
+    return banking.replacePreview(id, psu(request));
+  }
+
+  /** "Replace with the bank's data", confirmed with the token of the preview. */
+  @PostMapping("/accounts/{id}/replace")
+  public BankingService.Replace replace(@AuthenticationPrincipal UserDetails principal, @PathVariable long id,
+                                        @RequestBody ReplaceRequest body) {
+    enabledUser(principal);
+    return banking.replace(id, body == null ? null : body.token());
+  }
+
+  /** Deletes the rows from a file or typed in older than the bank's history ({@code before}, as the user saw it). */
+  @PostMapping("/accounts/{id}/delete-older")
+  public BankingService.DeletedOlder deleteOlder(@AuthenticationPrincipal UserDetails principal, @PathVariable long id,
+                                                 @RequestBody DeleteOlderRequest body) {
+    enabledUser(principal);
+    return banking.deleteOlder(id, body == null ? null : body.before());
   }
 
   @PostMapping("/sync")

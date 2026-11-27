@@ -35,6 +35,9 @@ import java.util.Set;
  *   currency: same day first, otherwise one day before or after. As many rows as movements: they get the bank id
  *   instead of a new row. More rows than movements: ambiguous, counted, nothing added (the movement is already among
  *   them, which one is not known). Fewer: the rows are matched and the rest added.</li>
+ *   <li>With {@code bankWins} (a whole history asked by the user, or "replace with the bank's data") the bank is the
+ *   truth: more rows than movements is not ambiguous any more, the first rows (by id) get the movements and the rest
+ *   stay without a bank id, so every movement of the bank ends up in the account exactly once.</li>
  * </ul>
  */
 @Component
@@ -53,6 +56,10 @@ public class BankImport {
   }
 
   public Result importInto(String moneyAccount, LocalDate syncFrom, List<Tx> txs) {
+    return importInto(moneyAccount, syncFrom, txs, false);
+  }
+
+  public Result importInto(String moneyAccount, LocalDate syncFrom, List<Tx> txs, boolean bankWins) {
     List<Incoming> booked = booked(txs, syncFrom);
     LocalDate last = booked.stream().map(Incoming::day).max(Comparator.naturalOrder()).orElse(null);
     Set<String> known = new HashSet<>(transactions.findExternalRefs(moneyAccount));
@@ -79,7 +86,7 @@ public class BankImport {
     for (List<Incoming> group : groups(fresh).values()) {
       Incoming first = group.getFirst();
       List<BankTransaction> pool = pool(candidates, first, 0);
-      if (pool.size() > group.size()) {
+      if (pool.size() > group.size() && !bankWins) {
         ambiguous += group.size();
         candidates.removeAll(pool);
         continue;
@@ -98,7 +105,7 @@ public class BankImport {
     for (List<Incoming> group : groups(left).values()) {
       Incoming first = group.getFirst();
       List<BankTransaction> pool = pool(candidates, first, 1);
-      if (pool.size() > group.size()) {
+      if (pool.size() > group.size() && !bankWins) {
         ambiguous += group.size();
         continue;
       }
@@ -115,6 +122,11 @@ public class BankImport {
     }
     transactions.saveAllAndFlush(toSave);
     return new Result(imported, matched, ambiguous, last);
+  }
+
+  /** The oldest booked day among the movements (as {@link #importInto} reads them), null if none. */
+  public static LocalDate oldestBooked(List<Tx> txs) {
+    return booked(txs, null).stream().map(Incoming::day).min(Comparator.naturalOrder()).orElse(null);
   }
 
   private static List<Incoming> booked(List<Tx> txs, LocalDate syncFrom) {

@@ -9,6 +9,7 @@ import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -51,9 +52,16 @@ public class BankTransactionService {
     return bankTransactionRepository.findDistinctAccounts();
   }
 
+  /**
+   * The balance after every movement, back from today's balance, and the balance of every day (daily_balance): the
+   * days of the account are written again from scratch, so a day whose movements were deleted does not keep its old
+   * balance. In one transaction.
+   */
+  @Transactional
   public boolean computeCumulativeAmount(String account, BigDecimal todayMoney) {
     List<BankTransaction> bankTransactions = bankTransactionRepository.findTransactionByAccountOrderByDatetimeDescIdDesc(account);
     if (bankTransactions.isEmpty()) {
+      dailyBalanceRepository.deleteAllOfAccount(account);
       return false;
     }
 
@@ -77,6 +85,7 @@ public class BankTransactionService {
     }
     List<DailyBalance> snapshots = new ArrayList<>();
     dailyMap.forEach((date, balance) -> snapshots.add(new DailyBalance(account, date, balance)));
+    dailyBalanceRepository.deleteAllOfAccount(account);
     dailyBalanceRepository.saveAllAndFlush(snapshots);
 
     return true;
