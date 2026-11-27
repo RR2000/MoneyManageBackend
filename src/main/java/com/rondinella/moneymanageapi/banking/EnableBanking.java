@@ -28,7 +28,8 @@ import java.util.List;
 
 /**
  * Client of the Enable Banking API (https://enablebanking.com/docs/api/reference/). Every request carries a JWT
- * signed RS256 with the application's key (kid = application id, valid one hour; Enable Banking allows at most 24).
+ * signed RS256 with the application's key (kid = application id, valid one hour; Enable Banking allows at most 24;
+ * aud a string: an array is refused with 401 "JWT audience is not valid").
  * Nothing of what goes or comes back is logged: errors carry only Enable Banking's error code and the endpoint pattern.
  */
 @Component
@@ -237,7 +238,7 @@ public class EnableBanking {
       token = Jwts.builder()
           .header().add("typ", "JWT").keyId(settings.appId()).and()
           .issuer("enablebanking.com")
-          .audience().add("api.enablebanking.com").and()
+          .audience().single("api.enablebanking.com")
           .issuedAt(Date.from(now))
           .expiration(Date.from(exp))
           .signWith(settings.privateKey(), Jwts.SIG.RS256)
