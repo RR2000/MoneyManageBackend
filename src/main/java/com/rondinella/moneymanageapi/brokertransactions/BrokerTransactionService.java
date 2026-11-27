@@ -15,9 +15,13 @@ import org.springframework.web.server.ResponseStatusException;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.sql.Timestamp;
+import java.util.ArrayList;
 import java.util.Currency;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @Service
 public class BrokerTransactionService {
@@ -34,7 +38,6 @@ public class BrokerTransactionService {
   BankTransactionService bankTransactionService;
   final
   StockPrices stockPrices;
-  BrokerTransactionMapper brokerTransactionMapper = BrokerTransactionMapper.INSTANCE;
 
   public BrokerTransactionService(BrokerTransactionRepository brokerTransactionRepository, BankTransactionService bankTransactionService,
                                   MarketData marketData, StockPrices stockPrices) {
@@ -133,14 +136,59 @@ public class BrokerTransactionService {
     }
   }
 
-  private List<BrokerTransaction> addTransactions(List<BrokerTransactionDto> brokerTransactionDtos) {
-    return brokerTransactionRepository.saveAllAndFlush(brokerTransactionMapper.toEntity(brokerTransactionDtos));
+  /**
+   * Adds the executions of a Degiro export without doubling what is there. With an order id, an execution is the same
+   * when order id, moment, ISIN, quantity and price are the same; rows imported before the order id was read (no order
+   * id) are found by moment, ISIN, quantity and price and get it. Without an order id, by moment, ISIN, quantity and
+   * price. Equal executions are counted: n in the file and m already there update m rows and add n - m.
+   */
+  private List<BrokerTransaction> addTrades(List<DegiroCsv.Trade> trades) {
+    List<BrokerTransaction> toSave = new ArrayList<>();
+    Set<Long> claimed = new HashSet<>();
+    Map<List<Object>, List<BrokerTransaction>> byMoment = new HashMap<>();
+    for (DegiroCsv.Trade trade : trades) {
+      List<BrokerTransaction> there = byMoment.computeIfAbsent(List.of(trade.isin(), trade.datetime().toInstant()),
+          k -> brokerTransactionRepository.findByIsinAndDatetimeOrderByIdAsc(trade.isin(), trade.datetime()));
+      BrokerTransaction row = null;
+      if (trade.orderId() != null) {
+        row = first(there, claimed, r -> trade.orderId().equals(r.getOrderId()) && same(r, trade));
+      }
+      if (row == null) {
+        row = first(there, claimed, r -> r.getOrderId() == null && same(r, trade));
+      }
+      if (row == null) {
+        row = new BrokerTransaction();
+        row.setDatetime(trade.datetime());
+        row.setIsin(trade.isin());
+        row.setQuantity(trade.quantity());
+        row.setStockPrice(trade.price());
+      } else {
+        claimed.add(row.getId());
+      }
+      row.setDescription(trade.product());
+      row.setFee(trade.fee());
+      if (trade.currency() != null) {
+        row.setCurrency(trade.currency());
+      }
+      if (trade.feeCurrency() != null) {
+        row.setFeeCurrency(trade.feeCurrency());
+      }
+      if (trade.orderId() != null) {
+        row.setOrderId(trade.orderId());
+      }
+      toSave.add(row);
+    }
+    return brokerTransactionRepository.saveAllAndFlush(toSave);
   }
 
-  private List<BrokerTransactionDto> degiroCsv(String csvData) throws IOException {
-    List<Map<String, String>> degiroMap = Utils.csvToMap(csvData);
+  private static boolean same(BrokerTransaction row, DegiroCsv.Trade trade) {
+    return row.getQuantity() != null && row.getQuantity().compareTo(trade.quantity()) == 0
+        && row.getStockPrice() != null && row.getStockPrice().compareTo(trade.price()) == 0;
+  }
 
-    return brokerTransactionMapper.toDtoFromDegiro(degiroMap);
+  private static BrokerTransaction first(List<BrokerTransaction> rows, Set<Long> claimed,
+                                         java.util.function.Predicate<BrokerTransaction> test) {
+    return rows.stream().filter(r -> !claimed.contains(r.getId()) && test.test(r)).findFirst().orElse(null);
   }
 
   public List<BrokerTransaction> addTransactionsFromCsv(String csvData, BrokerName bankName) {
@@ -148,14 +196,10 @@ public class BrokerTransactionService {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "The CSV is empty");
     }
     try {
-      List<BrokerTransactionDto> brokerTransactionDtos;
-      switch (bankName) {
-        case Degiro -> brokerTransactionDtos = degiroCsv(csvData);
+      return switch (bankName) {
+        case Degiro -> addTrades(DegiroCsv.trades(csvData));
         case Sanpaolo -> throw new RuntimeException("Sanpaolo not implemented yet");
-        default -> throw new RuntimeException("Impossible to be here");
-      }
-
-      return addTransactions(brokerTransactionDtos);
+      };
     } catch (Exception e) {
       // unreadable file or not a Degiro export: the user's fault, not a server error (and no detail of the rows)
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Cannot read the " + bankName + " CSV", e);

@@ -99,6 +99,8 @@ public class SampleData {
       buy.setQuantity(BigDecimal.valueOf(2 + rng.nextInt(2)));
       buy.setStockPrice(close);
       buy.setFee(BigDecimal.ONE.negate());
+      buy.setCurrency("EUR");
+      buy.setFeeCurrency("EUR");
       if (!buy.getDatetime().toLocalDateTime().toLocalDate().isAfter(today)) {
         buys.add(buy);
       }

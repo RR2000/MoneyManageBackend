@@ -2,6 +2,7 @@ package com.rondinella.moneymanageapi.banktransactions;
 
 import com.opencsv.CSVReader;
 import com.opencsv.exceptions.CsvValidationException;
+import com.rondinella.moneymanageapi.brokertransactions.DegiroCsv;
 import com.rondinella.moneymanageapi.common.Utils;
 import com.rondinella.moneymanageapi.common.dtos.GraphPointsDto;
 import org.apache.poi.ss.usermodel.*;
@@ -14,6 +15,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.IOException;
 import java.io.StringReader;
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
 import java.sql.Timestamp;
 import java.time.LocalDate;
 import java.util.*;
@@ -219,25 +221,21 @@ public class BankTransactionService {
     return bankTransactionDtos;
   }
 
-  public List<BankTransactionDto> degiroCsv(MultipartFile file) throws IOException, CsvValidationException {
-    String csvData = new String(file.getBytes());
+  /**
+   * Degiro's account statement (Account.csv), read by column name in any of its languages, each row with its own
+   * currency (dividends and withholdings in USD stay in USD). All in the account "Degiro", as before.
+   */
+  public List<BankTransactionDto> degiroCsv(MultipartFile file) throws IOException {
     List<BankTransactionDto> bankTransactionDtos = new ArrayList<>();
-    try (CSVReader reader = new CSVReader(new StringReader(csvData))) {
-      String[] headers = reader.readNext();
-      for (int i = 0; i < headers.length; i++) {
-        if (headers[i].isEmpty()) headers[i] = String.valueOf(i);
-      }
-      String[] line;
-      while ((line = reader.readNext()) != null) {
-        Map<String, Object> rowData = new HashMap<>();
-        for (int i = 0; i < headers.length; i++) {
-          rowData.put(headers[i], (i < line.length) ? line[i] : "");
-        }
-        if (((String) rowData.get("8")).isEmpty()) continue;
-        BankTransactionDto dto = bankTransactionMapper.toDtoFromDegiro(rowData);
-        if (dto.getDescription().equals("Degiro Cash Sweep Transfer")) continue;
-        bankTransactionDtos.add(dto);
-      }
+    for (DegiroCsv.CashMovement m : DegiroCsv.account(new String(file.getBytes(), StandardCharsets.UTF_8))) {
+      BankTransactionDto dto = new BankTransactionDto();
+      dto.setAccount("Degiro");
+      dto.setDatetime(m.datetime());
+      dto.setDescription(m.description());
+      dto.setAmount(m.amount());
+      dto.setFee(BigDecimal.ZERO);
+      dto.setCurrency(m.currency());
+      bankTransactionDtos.add(dto);
     }
     return bankTransactionDtos;
   }
