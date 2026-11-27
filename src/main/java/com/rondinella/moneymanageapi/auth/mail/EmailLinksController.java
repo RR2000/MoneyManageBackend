@@ -2,6 +2,7 @@ package com.rondinella.moneymanageapi.auth.mail;
 
 import com.rondinella.moneymanageapi.auth.User;
 import com.rondinella.moneymanageapi.auth.UserRepository;
+import com.rondinella.moneymanageapi.banking.BankingSettings;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -34,10 +35,12 @@ public class EmailLinksController {
 
   private final EmailLinks links;
   private final UserRepository users;
+  private final BankingSettings banking;
 
-  public EmailLinksController(EmailLinks links, UserRepository users) {
+  public EmailLinksController(EmailLinks links, UserRepository users, BankingSettings banking) {
     this.links = links;
     this.users = users;
+    this.banking = banking;
   }
 
   /** Always 202, whether an account has this email or not. */
@@ -60,7 +63,7 @@ public class EmailLinksController {
     return ResponseEntity.noContent().build();
   }
 
-  /** The logged-in account: username and confirmed email (null if none). */
+  /** The logged-in account: username, confirmed email (null if none), which optional features it has. */
   @GetMapping(path = "/api/account", produces = "application/json")
   public Map<String, Object> account(@AuthenticationPrincipal UserDetails principal) {
     User user = current(principal);
@@ -68,6 +71,8 @@ public class EmailLinksController {
     body.put("username", user.getUsername());
     body.put("email", user.getEmail());
     body.put("emailLinks", links.enabled());
+    // open banking: only for the enabled users (the web app shows the banks page only then)
+    body.put("banking", banking.enabledFor(user.getId()));
     return body;
   }
 
