@@ -2,6 +2,8 @@ name: CI
 
 # PR and main: tests on a real (embedded) PostgreSQL.
 # main: image ghcr.io/rr2000/money-manage-backend on GitHub Container Registry, :sha-<commit> and :main.
+# PR from a branch of this repo: the same image as :pr-<number> and :sha-<commit of the branch>, to try it on money-dev
+# before the merge (ferraglia: Actions > deploy > money-develop). PRs from forks get no image.
 on:
   push:
     branches: [main]
@@ -25,7 +27,7 @@ jobs:
       - run: mvn -B verify
 
   image:
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
     needs: test
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -33,9 +35,22 @@ jobs:
       contents: read
       packages: write
     steps:
+      # PR: the branch itself (by default a PR checks out the merge with main)
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - id: tag
-        run: echo "tag=sha-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+        env:
+          PR: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          image=ghcr.io/rr2000/money-manage-backend
+          if [ -n "$PR" ]; then
+            # the commit of the branch, not the merge commit GitHub makes for the PR
+            printf 'tags<<EOF\n%s:sha-%s\n%s:pr-%s\nEOF\n' "$image" "${HEAD_SHA::7}" "$image" "$PR" >> "$GITHUB_OUTPUT"
+          else
+            printf 'tags<<EOF\n%s:sha-%s\n%s:main\nEOF\n' "$image" "${GITHUB_SHA::7}" "$image" >> "$GITHUB_OUTPUT"
+          fi
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
         with:
@@ -46,9 +61,7 @@ jobs:
         with:
           context: .
           push: true
-          tags: |
-            ghcr.io/rr2000/money-manage-backend:${{ steps.tag.outputs.tag }}
-            ghcr.io/rr2000/money-manage-backend:main
+          tags: ${{ steps.tag.outputs.tags }}
           labels: |
             org.opencontainers.image.source=https://github.com/RR2000/money-manage-backend
           cache-from: type=gha
