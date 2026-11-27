@@ -17,6 +17,13 @@ sees only its own data.
   counted by account, moment and description: the ones already there are updated, only the extra ones added). Given today's balance of an
   account, the balance of every past day is rebuilt and kept per day
   (`POST /api/banks/transactions/accounts/{account}/balance`, body `{"amountToday": 1234.56}`).
+- **Degiro**: the two exports are read by column name, with Italian or English headers (and the German, Dutch,
+  Spanish and French names of the same columns), commas or semicolons, decimal comma or dot. The account statement
+  (Account.csv, bank upload `Degiro`) keeps the currency of every row: a dividend in USD stays in USD, nothing is
+  converted. The transactions (Transactions.csv) keep the currency of the price and of the fee and the Order ID:
+  the same file again, or the same executions exported in another language, add nothing (by Order ID; rows imported
+  before it was read are found by moment, ISIN, quantity and price and get it), and two fills of one order in the
+  same minute are two rows.
 - **Broker**: Degiro transactions CSV (`POST /api/brokers/transactions/upload`), worth over time from the
   prices of each ISIN. Weekly prices, kept in the database, come from Alpha Vantage (`MONEY_PRICES_API_KEY`, free
   plan: 25 requests a day and one a second, counted and queued by the backend), with Yahoo Finance as last resort.
