@@ -13,16 +13,18 @@ import java.util.Map;
 
 /**
  * Hibernate multi-tenancy, one schema per user: each session gets a connection switched to the schema
- * of {@link TenantContext#current()}.
+ * of {@link TenantContext#current()}, made sure to exist first ({@link TenantMigrations#ensure}).
  */
 @Component
 public class TenantHibernateConfig implements HibernatePropertiesCustomizer,
     MultiTenantConnectionProvider<String>, CurrentTenantIdentifierResolver<String> {
 
   private final transient DataSource dataSource;
+  private final transient TenantMigrations migrations;
 
-  public TenantHibernateConfig(DataSource dataSource) {
+  public TenantHibernateConfig(DataSource dataSource, TenantMigrations migrations) {
     this.dataSource = dataSource;
+    this.migrations = migrations;
   }
 
   @Override
@@ -57,6 +59,10 @@ public class TenantHibernateConfig implements HibernatePropertiesCustomizer,
 
   @Override
   public Connection getConnection(String schema) throws SQLException {
+    if (!TenantContext.SHARED.equals(schema)) {
+      // a user's schema that is not there yet is created here, not discovered by the first query that fails
+      migrations.ensure(schema);
+    }
     Connection connection = getAnyConnection();
     try {
       connection.setSchema(schema);
