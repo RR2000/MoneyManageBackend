@@ -16,9 +16,11 @@ import java.time.LocalDate;
 import java.time.YearMonth;
 import java.time.ZoneId;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 /**
  * One money account, for its page: balance, this month's money in and out, balance history, and its movements newest
@@ -48,8 +50,14 @@ public class AccountPages {
   public record Point(LocalDate date, BigDecimal balance) {
   }
 
+  /** A movement of any account, with the account it belongs to and the id of its page. */
+  public record Latest(long id, String accountId, String account, Timestamp datetime, String description,
+                       BigDecimal amount, String currency, BankTransaction.Source source) {
+  }
+
   static final int MAX_LIMIT = 200;
-  static final ZoneId ZONE = ZoneId.of("Europe/Rome");
+  public static final ZoneId ZONE = ZoneId.of("Europe/Rome");
+  static final int MAX_LATEST = 50;
 
   private final EntityManager em;
   private final BankTransactionRepository transactions;
@@ -147,6 +155,23 @@ public class AccountPages {
           t.getCumulativeAmount()));
     }
     return new Page(items, rows.size() > size);
+  }
+
+  /** The newest movements of every account, newest first (at most {@link #MAX_LATEST}). */
+  @Transactional(readOnly = true)
+  public List<Latest> latest(int limit) {
+    int size = Math.max(1, Math.min(limit <= 0 ? 8 : limit, MAX_LATEST));
+    List<BankTransaction> rows = em.createQuery("SELECT t FROM BankTransaction t ORDER BY t.datetime DESC, t.id DESC",
+        BankTransaction.class).setMaxResults(size).getResultList();
+    Map<String, String> currencies = new HashMap<>();
+    if (rows.stream().anyMatch(t -> t.getCurrency() == null)) {
+      for (Object[] row : transactions.countByAccountAndCurrency()) {
+        currencies.putIfAbsent((String) row[0], (String) row[1]);
+      }
+    }
+    return rows.stream().map(t -> new Latest(t.getId(), idOf(t.getAccount()), t.getAccount(), t.getDatetime(),
+        t.getDescription(), t.getAmount(), t.getCurrency() != null ? t.getCurrency()
+        : currencies.getOrDefault(t.getAccount(), "EUR"), t.getSource())).toList();
   }
 
   /** an amount typed in the search box, with a decimal comma or dot; null if it is not a number */

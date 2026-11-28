@@ -37,6 +37,12 @@ public class MoneyAccountsController {
     this.pages = pages;
   }
 
+  /** the newest movements of every account (at most 50), newest first */
+  @GetMapping("/movements/latest")
+  public List<AccountPages.Latest> latest(@RequestParam(defaultValue = "8") int limit) {
+    return pages.latest(limit);
+  }
+
   @GetMapping("/{id}")
   public AccountPages.Detail detail(@PathVariable String id) {
     return pages.detail(id, LocalDate.now(AccountPages.ZONE));
