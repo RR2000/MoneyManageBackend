@@ -15,6 +15,8 @@ public interface DailyBalanceRepository extends JpaRepository<DailyBalance, Dail
 
   List<DailyBalance> findByAccountOrderByDate(String account);
 
+  DailyBalance findFirstByAccountOrderByDateDesc(String account);
+
   @Transactional
   @Modifying(flushAutomatically = true, clearAutomatically = true)
   @Query("DELETE FROM DailyBalance d WHERE d.account = :account")
