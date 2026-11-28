@@ -91,17 +91,38 @@ public class AuthService {
 
   /** A new account with its own (empty) schema. Without a password (GitHub accounts) nobody can log in with one. */
   public User createAccount(String username, String password, String email) {
+    return createAccount(username, password, email, null);
+  }
+
+  /** Same, for an account of the site's OpenID provider: its subject is saved with the account. */
+  public User createAccount(String username, String password, String email, String idpSubject) {
     User user = new User();
     user.setUsername(username);
     user.setPassword(passwordEncoder.encode(password != null ? password : UUID.randomUUID().toString()));
     user.setRole("USER");
     user.setEmail(email);
+    user.setIdpSubject(idpSubject);
     user = userRepository.save(user);
     tenantSchemas.migrate(TenantContext.schemaOf(user.getId()));
     return user;
   }
 
-  /** Token for an account that already proved who it is (GitHub). */
+  /**
+   * A free username for an account created by a login provider: the wanted name if free (and valid here), otherwise
+   * name-tag, name-tag2... (tag "gh" for GitHub, "id" for the site's OpenID provider).
+   */
+  public String freeUsername(String wanted, String tag) {
+    String base = (wanted == null ? "" : wanted).replaceAll("[^A-Za-z0-9._-]", "");
+    if (base.length() < 3) base = (tag.equals("gh") ? "github" : "user") + "-" + base;
+    if (base.length() > 26) base = base.substring(0, 26);
+    String candidate = base;
+    for (int i = 1; userRepository.existsByUsernameIgnoreCase(candidate); i++) {
+      candidate = base + "-" + tag + (i == 1 ? "" : i);
+    }
+    return candidate;
+  }
+
+  /** Token for an account that already proved who it is (GitHub, the site's OpenID provider). */
   public String tokenFor(String username) {
     return jwtService.generateToken(username);
   }

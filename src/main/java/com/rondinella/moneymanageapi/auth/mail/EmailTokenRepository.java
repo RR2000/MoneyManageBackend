@@ -20,6 +20,11 @@ public interface EmailTokenRepository extends JpaRepository<EmailToken, String> 
   @Query("update EmailToken t set t.usedAt = :now where t.userId = :userId and t.purpose = :purpose and t.usedAt is null")
   int useAll(@Param("userId") Long userId, @Param("purpose") EmailToken.Purpose purpose, @Param("now") Instant now);
 
+  /** A link to confirm this email on some account is out and still good (the account is waiting for its owner). */
+  @Query("select count(t) > 0 from EmailToken t where t.email = :email and t.purpose = :purpose"
+      + " and t.usedAt is null and t.expiresAt > :now")
+  boolean pending(@Param("email") String email, @Param("purpose") EmailToken.Purpose purpose, @Param("now") Instant now);
+
   @Modifying
   @Query("delete from EmailToken t where t.expiresAt < :before")
   int deleteExpiredBefore(@Param("before") Instant before);

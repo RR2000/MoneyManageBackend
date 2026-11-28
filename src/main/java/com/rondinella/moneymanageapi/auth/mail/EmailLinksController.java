@@ -2,6 +2,7 @@ package com.rondinella.moneymanageapi.auth.mail;
 
 import com.rondinella.moneymanageapi.auth.User;
 import com.rondinella.moneymanageapi.auth.UserRepository;
+import com.rondinella.moneymanageapi.auth.oidc.OidcLogin;
 import com.rondinella.moneymanageapi.banking.BankingSettings;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpStatus;
@@ -36,16 +37,19 @@ public class EmailLinksController {
   private final EmailLinks links;
   private final UserRepository users;
   private final BankingSettings banking;
+  private final OidcLogin oidc;
 
-  public EmailLinksController(EmailLinks links, UserRepository users, BankingSettings banking) {
+  public EmailLinksController(EmailLinks links, UserRepository users, BankingSettings banking, OidcLogin oidc) {
     this.links = links;
     this.users = users;
     this.banking = banking;
+    this.oidc = oidc;
   }
 
   /** Always 202, whether an account has this email or not. */
   @PostMapping("/api/auth/password/forgot")
   public ResponseEntity<Void> forgot(@RequestBody EmailRequest request, HttpServletRequest http) {
+    requirePasswordLogin();
     links.requestReset(request.email(), ClientIp.of(http));
     return ResponseEntity.accepted().build();
   }
@@ -53,6 +57,7 @@ public class EmailLinksController {
   /** The new password; the answer says the username to log in with (or the account's email). */
   @PostMapping(path = "/api/auth/password/reset", produces = "application/json")
   public Map<String, String> reset(@RequestBody ResetRequest request) {
+    requirePasswordLogin();
     return Map.of("username", links.resetPassword(request.token(), request.password()));
   }
 
@@ -82,6 +87,13 @@ public class EmailLinksController {
                                           @RequestBody EmailRequest request, HttpServletRequest http) {
     links.requestEmailChange(current(principal), request.email(), ClientIp.of(http));
     return ResponseEntity.accepted().build();
+  }
+
+  /** AUTH_MODE=oidc: passwords are not used, so there is nothing to reset. */
+  private void requirePasswordLogin() {
+    if (!oidc.passwordLogin()) {
+      throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Password login is off");
+    }
   }
 
   private User current(UserDetails principal) {

@@ -5,7 +5,15 @@ import com.rondinella.moneymanageapi.auth.github.GitHubLogin;
 import com.rondinella.moneymanageapi.auth.github.GitHubUserService;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
-import org.springframework.security.oauth2.client.registration.InMemoryClientRegistrationRepository;
+import com.rondinella.moneymanageapi.auth.oidc.OidcAccounts;
+import com.rondinella.moneymanageapi.auth.oidc.OidcLogin;
+import org.springframework.security.config.ObjectPostProcessor;
+import org.springframework.security.core.AuthenticationException;
+import org.springframework.security.oauth2.client.registration.ClientRegistration;
+import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
+import org.springframework.security.oauth2.client.web.OAuth2AuthorizationRequestRedirectFilter;
+import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
+import org.springframework.security.oauth2.core.oidc.user.OidcUser;
 import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.security.web.authentication.HttpStatusEntryPoint;
 import com.rondinella.moneymanageapi.auth.JwtAuthenticationFilter;
@@ -36,6 +44,8 @@ public class SecurityConfig {
                                                  CorsConfigurationSource corsConfigurationSource,
                                                  GitHubLogin gitHub,
                                                  GitHubUserService gitHubUsers,
+                                                 OidcLogin oidc,
+                                                 OidcAccounts oidcAccounts,
                                                  AuthService authService) throws Exception {
     http
         .cors(cors -> cors.configurationSource(corsConfigurationSource))
@@ -56,22 +66,55 @@ public class SecurityConfig {
         .exceptionHandling(e -> e.authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED)))
         .authenticationProvider(authenticationProvider)
         .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
-    if (gitHub.enabled()) {
-      // GitHub sends the browser back to the backend, which gives the web app its token in the URL fragment
-      // (never sent to a server, so it does not end up in access logs)
+    // GitHub (not with AUTH_MODE=oidc) and the site's OpenID provider (AUTH_MODE both or oidc, OidcLogin) send the
+    // browser back to the backend, which gives the web app its token in the URL fragment (never sent to a server, so
+    // it does not end up in access logs); for the OpenID provider also the id token, for its logout
+    boolean withGitHub = gitHub.enabled() && oidc.passwordLogin();
+    if (withGitHub || oidc.enabled()) {
+      ClientRegistration gitHubRegistration = withGitHub ? gitHub.registration() : null;
+      ClientRegistrationRepository registrations = id -> switch (id) {
+        case "github" -> gitHubRegistration;
+        case OidcLogin.REGISTRATION_ID -> oidc.registration();
+        default -> null;
+      };
       http.oauth2Login(oauth2 -> oauth2
           .loginPage("/login")
-          .clientRegistrationRepository(new InMemoryClientRegistrationRepository(gitHub.registration()))
+          .clientRegistrationRepository(registrations)
           .authorizationEndpoint(a -> a.baseUri(GitHubLogin.AUTHORIZATION_BASE))
           .redirectionEndpoint(r -> r.baseUri(GitHubLogin.CALLBACK_BASE + "/*"))
-          .userInfoEndpoint(u -> u.userService(gitHubUsers))
+          .userInfoEndpoint(u -> u.userService(gitHubUsers).oidcUserService(oidcAccounts))
           .successHandler((request, response, authentication) -> {
-            String username = ((OAuth2User) authentication.getPrincipal()).getName();
-            response.sendRedirect("/login#token=" + authService.tokenFor(username));
+            Object principal = authentication.getPrincipal();
+            String token = authService.tokenFor(((OAuth2User) principal).getName());
+            String fragment = "token=" + token;
+            if (principal instanceof OidcUser user) {
+              fragment += "&id_token=" + user.getIdToken().getTokenValue();
+            }
+            response.sendRedirect("/login#" + fragment);
           })
-          .failureHandler((request, response, exception) -> response.sendRedirect("/login#github-error")));
+          .failureHandler((request, response, exception) -> response.sendRedirect(
+              request.getRequestURI().endsWith("/" + OidcLogin.REGISTRATION_ID)
+                  ? "/login#oidc-error=" + oidcErrorCode(exception)
+                  : "/login#github-error"))
+          // the provider cannot be reached (no registration): back to the login page, not an error page
+          .withObjectPostProcessor(new ObjectPostProcessor<OAuth2AuthorizationRequestRedirectFilter>() {
+            @Override
+            public <O extends OAuth2AuthorizationRequestRedirectFilter> O postProcess(O filter) {
+              filter.setAuthenticationFailureHandler((request, response, exception) ->
+                  response.sendRedirect("/login#oidc-error=unavailable"));
+              return filter;
+            }
+          }));
     }
     return http.build();
+  }
+
+  /** Only the codes the web app knows (OidcAccounts.ERRORS), anything else is "failed": no provider text in URLs. */
+  private static String oidcErrorCode(AuthenticationException exception) {
+    if (exception instanceof OAuth2AuthenticationException e && OidcAccounts.ERRORS.contains(e.getError().getErrorCode())) {
+      return e.getError().getErrorCode().replace('_', '-');
+    }
+    return "failed";
   }
 
   @Bean
