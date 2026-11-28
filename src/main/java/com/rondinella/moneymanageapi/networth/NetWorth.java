@@ -135,7 +135,7 @@ public class NetWorth {
   }
 
   /** {@code from}, the last day of every month after it and before today, and today */
-  static List<LocalDate> days(LocalDate from, LocalDate today) {
+  public static List<LocalDate> days(LocalDate from, LocalDate today) {
     List<LocalDate> days = new ArrayList<>();
     days.add(from);
     for (LocalDate end = YearMonth.from(from).atEndOfMonth(); end.isBefore(today);

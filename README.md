@@ -6,7 +6,7 @@ This is the REST API (Spring Boot); the web app is in
 [money-manage-app](https://github.com/RR2000/money-manage-app).
 
 Demo: https://money.raoulrondinella.dev - register with any username; tick "sample data" to start with a
-made-up year of movements, or leave it empty and upload your own files (or "Accedi con GitHub"). Every account
+made-up year of movements and two made-up funds, or leave it empty and upload your own files (or "Accedi con GitHub"). Every account
 sees only its own data.
 
 ## What it does
@@ -64,6 +64,22 @@ sees only its own data.
   accounts and real estate in another currency are left out of the total, nothing is converted, and `excluded` says
   how many and which currencies. `GET /api/money-accounts/movements/latest?limit=8` gives the newest movements of every
   account (at most 50), each with its account and the `accountId` of its page.
+- **Investments**: `GET /api/investments` gives every position (ISIN) with name, quantity, average cost (weighted
+  average cost: a purchase adds quantity times price plus its fee, a sale takes out the average cost of what it sold
+  and the rest is the realised gain), the cost of what is held (`invested`), the value at the last known price and its
+  date, the gain in euro and as a share, the tax if it were sold today (26% of the gain, only when positive, position by
+  position: an estimate) and the gain after it, its share of the portfolio and its target; the totals; the returns
+  from the real trades: money-weighted (`xirr`, a year: purchases with their fees and sales net of them are the flows,
+  today's value the last one), the simple gain on what was spent on purchases, and time-weighted (`twr` for the whole
+  period and `twrYearly`: the months chained, modified Dietz inside each month, so it does not depend on when money was
+  paid in); the allocation against the targets (percent of the portfolio now and wanted, and the gap in euro: positive
+  = buy about that much); the history (from the first trade, the end of every month and today: value, money put in =
+  purchases minus sales, value by ISIN). Only euro: a position traded or quoted in another currency, or without any
+  price, is flagged (`excluded`: `CURRENCY`, `NO_PRICE`), not converted and left out of totals, returns, allocation
+  and history. `GET /api/investments/targets` and `PUT /api/investments/targets` `{"targets":[{"isin","percent"}]}`
+  read and replace the targets: an ISIN of the user at most once, 0 to 100 with at most two decimals (0: none),
+  together at most 100 (the rest is "not assigned"); otherwise 400 `TARGET_RANGE`, `TARGET_SUM`, `UNKNOWN_ISIN`,
+  `DUPLICATE_ISIN`.
 - **Real estate**: CRUD with total estimated value.
 - **Monte Carlo**: projection of the portfolio from its historical monthly returns (percentiles P5-P95).
 - **Accounts**: registration and login with a JWT, optional "Accedi con GitHub" (an account is found again only by a
