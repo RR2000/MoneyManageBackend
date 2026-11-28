@@ -1,5 +1,6 @@
 package com.rondinella.moneymanageapi.stocks;
 
+import com.rondinella.moneymanageapi.demo.DemoSchemas;
 import com.rondinella.moneymanageapi.tenant.TenantContext;
 import jakarta.annotation.PreDestroy;
 import jakarta.persistence.EntityManager;
@@ -53,6 +54,7 @@ public class StockPrices {
   private final SymbolResolver resolver;
   private final AlphaVantage alphaVantage;
   private final YahooPrices yahoo;
+  private final DemoSchemas demoSchemas;
   private final TransactionTemplate transaction;
   private final Clock clock;
   private final Duration wait;
@@ -68,12 +70,13 @@ public class StockPrices {
 
   public StockPrices(StockRepository stocks, InstrumentRepository instruments, SymbolResolver resolver,
                      AlphaVantage alphaVantage, YahooPrices yahoo, PlatformTransactionManager transactions,
-                     @Value("${app.prices.wait-ms:3000}") long waitMillis) {
+                     DemoSchemas demoSchemas, @Value("${app.prices.wait-ms:3000}") long waitMillis) {
     this.stocks = stocks;
     this.instruments = instruments;
     this.resolver = resolver;
     this.alphaVantage = alphaVantage;
     this.yahoo = yahoo;
+    this.demoSchemas = demoSchemas;
     this.transaction = new TransactionTemplate(transactions);
     this.wait = Duration.ofMillis(waitMillis);
     this.clock = Clock.systemUTC();
@@ -96,9 +99,15 @@ public class StockPrices {
         : stocks.findAllByIsinAndDatetimeBetweenOrderByDatetime(isin, from, to);
   }
 
-  /** Downloads what is missing or old for these ISINs, waiting at most {@code app.prices.wait-ms}. */
+  /**
+   * Downloads what is missing or old for these ISINs, waiting at most {@code app.prices.wait-ms}. Never for a demo
+   * sandbox: its prices are the sample data's (or a CSV it imported), the market's daily quota is not for visitors.
+   */
   public void refresh(Collection<String> isins) {
     String schema = TenantContext.current();
+    if (demoSchemas.isDemo(schema)) {
+      return;
+    }
     Instant now = clock.instant();
     List<CompletableFuture<Void>> jobs = new ArrayList<>();
     for (String isin : isins) {

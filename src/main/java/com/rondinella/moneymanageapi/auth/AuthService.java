@@ -25,6 +25,8 @@ public class AuthService {
 
   private static final Pattern USERNAME = Pattern.compile("[A-Za-z0-9._-]{3,32}");
   private static final int MIN_PASSWORD = 8;
+  /** usernames of the demo sandboxes (DemoAccounts): nobody else gets one, the cleanup relies on it */
+  public static final String DEMO_PREFIX = "demo-";
 
   private final UserRepository userRepository;
   private final PasswordEncoder passwordEncoder;
@@ -53,6 +55,9 @@ public class AuthService {
     if (!USERNAME.matcher(username).matches()) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
           "Username: 3-32 characters, letters, digits, dot, dash or underscore");
+    }
+    if (isDemoName(username)) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Username: demo- is kept for the demo");
     }
     if (request.getPassword() == null || request.getPassword().length() < MIN_PASSWORD) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Password: at least " + MIN_PASSWORD + " characters");
@@ -102,6 +107,31 @@ public class AuthService {
     user.setRole("USER");
     user.setEmail(email);
     user.setIdpSubject(idpSubject);
+    return save(user);
+  }
+
+  /**
+   * A demo sandbox (DemoAccounts): no email, a password nobody knows (a random one, thrown away), the demo flag and
+   * the moment it ends. Its own empty schema, like any account.
+   */
+  public User createDemoAccount(String username, java.time.Instant expiresAt) {
+    if (!isDemoName(username)) {
+      throw new IllegalArgumentException("A demo account is named demo-...");
+    }
+    User user = new User();
+    user.setUsername(username);
+    user.setPassword(passwordEncoder.encode(UUID.randomUUID().toString()));
+    user.setRole("USER");
+    user.setDemo(true);
+    user.setExpiresAt(expiresAt);
+    return save(user);
+  }
+
+  public static boolean isDemoName(String username) {
+    return username != null && username.regionMatches(true, 0, DEMO_PREFIX, 0, DEMO_PREFIX.length());
+  }
+
+  private User save(User user) {
     user = userRepository.save(user);
     try {
       tenantSchemas.migrate(TenantContext.schemaOf(user.getId()));
@@ -119,7 +149,7 @@ public class AuthService {
    */
   public String freeUsername(String wanted, String tag) {
     String base = (wanted == null ? "" : wanted).replaceAll("[^A-Za-z0-9._-]", "");
-    if (base.length() < 3) base = (tag.equals("gh") ? "github" : "user") + "-" + base;
+    if (base.length() < 3 || isDemoName(base)) base = (tag.equals("gh") ? "github" : "user") + "-" + base;
     if (base.length() > 26) base = base.substring(0, 26);
     String candidate = base;
     for (int i = 1; userRepository.existsByUsernameIgnoreCase(candidate); i++) {

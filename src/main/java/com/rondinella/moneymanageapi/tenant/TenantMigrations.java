@@ -45,4 +45,9 @@ public class TenantMigrations {
       }
     }
   }
+
+  /** after the schema was dropped (a demo sandbox removed): a later use would create it again */
+  public void forget(String schema) {
+    ready.remove(schema);
+  }
 }

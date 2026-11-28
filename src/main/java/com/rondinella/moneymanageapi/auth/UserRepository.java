@@ -17,4 +17,7 @@ public interface UserRepository extends JpaRepository<User, Long> {
   Optional<User> findByEmail(String email);
 
   Optional<User> findByIdpSubject(String idpSubject);
+
+  /** demo sandboxes still open at this moment (the cap on how many there can be) */
+  long countByDemoTrueAndExpiresAtAfter(java.time.Instant now);
 }

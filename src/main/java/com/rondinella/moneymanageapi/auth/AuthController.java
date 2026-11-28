@@ -4,6 +4,7 @@ import com.rondinella.moneymanageapi.auth.github.GitHubLogin;
 import com.rondinella.moneymanageapi.auth.mail.ClientIp;
 import com.rondinella.moneymanageapi.auth.mail.EmailLinks;
 import com.rondinella.moneymanageapi.auth.oidc.OidcLogin;
+import com.rondinella.moneymanageapi.demo.DemoSettings;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -28,18 +29,21 @@ public class AuthController {
   private final GitHubLogin gitHub;
   private final EmailLinks emailLinks;
   private final OidcLogin oidc;
+  private final DemoSettings demo;
 
-  public AuthController(AuthService authService, GitHubLogin gitHub, EmailLinks emailLinks, OidcLogin oidc) {
+  public AuthController(AuthService authService, GitHubLogin gitHub, EmailLinks emailLinks, OidcLogin oidc,
+                        DemoSettings demo) {
     this.authService = authService;
     this.gitHub = gitHub;
     this.emailLinks = emailLinks;
     this.oidc = oidc;
+    this.demo = demo;
   }
 
   /**
    * Which ways to log in the web app should offer, and where they start: password (login and sign-up), GitHub,
    * passwordReset ("forgot password" by email), oidc ("Entra con raoulrondinella.dev", with oidcLogoutUrl once the
-   * provider has been reached: the web app adds id_token_hint).
+   * provider has been reached: the web app adds id_token_hint), demo ("Prova la demo": POST /api/demo makes a sandbox).
    */
   @GetMapping("/providers")
   public Map<String, Object> providers() {
@@ -56,6 +60,7 @@ public class AuthController {
       body.put("oidcUrl", OidcLogin.START_URL);
       oidc.logoutUrl().ifPresent(url -> body.put("oidcLogoutUrl", url));
     }
+    body.put("demo", demo.enabled());
     return body;
   }
 

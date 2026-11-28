@@ -5,6 +5,7 @@ import com.rondinella.moneymanageapi.auth.UserRepository;
 import com.rondinella.moneymanageapi.auth.oidc.OidcLinks;
 import com.rondinella.moneymanageapi.auth.oidc.OidcLogin;
 import com.rondinella.moneymanageapi.banking.BankingSettings;
+import com.rondinella.moneymanageapi.demo.DemoSettings;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -40,14 +41,16 @@ public class EmailLinksController {
   private final BankingSettings banking;
   private final OidcLogin oidc;
   private final OidcLinks oidcLinks;
+  private final DemoSettings demo;
 
   public EmailLinksController(EmailLinks links, UserRepository users, BankingSettings banking, OidcLogin oidc,
-                              OidcLinks oidcLinks) {
+                              OidcLinks oidcLinks, DemoSettings demo) {
     this.links = links;
     this.users = users;
     this.banking = banking;
     this.oidc = oidc;
     this.oidcLinks = oidcLinks;
+    this.demo = demo;
   }
 
   /** Always 202, whether an account has this email or not. */
@@ -75,7 +78,9 @@ public class EmailLinksController {
   /**
    * The logged-in account: username, confirmed email (null if none), which optional features it has. oidc: the site's
    * single sign-on is on (the settings page offers "Collega a raoulrondinella.dev"); oidcLinked: this account is
-   * linked to it; oidcCanUnlink: it can be unlinked (not with AUTH_MODE=oidc, where it is the only way in).
+   * linked to it; oidcCanUnlink: it can be unlinked (not with AUTH_MODE=oidc, where it is the only way in). demo: a
+   * demo sandbox, with expiresAt (when it is removed), demoHours (how long a sandbox lasts) and demoMaxUploadKb (its
+   * largest file): the web app shows the demo bar and says why bank, mail and the sign-on are not there.
    */
   @GetMapping(path = "/api/account", produces = "application/json")
   public Map<String, Object> account(@AuthenticationPrincipal UserDetails principal) {
@@ -89,6 +94,14 @@ public class EmailLinksController {
     body.put("oidc", oidc.enabled());
     body.put("oidcLinked", oidc.enabled() && user.getIdpSubject() != null);
     body.put("oidcCanUnlink", oidc.enabled() && oidcLinks.canUnlink(user));
+    body.put("demo", user.isDemo());
+    if (user.isDemo()) {
+      // what goes outside is refused for a sandbox (DemoGuard): the web app does not offer it
+      body.put("banking", false);
+      body.put("expiresAt", user.getExpiresAt() == null ? null : user.getExpiresAt().toString());
+      body.put("demoHours", demo.lifetime().toHours());
+      body.put("demoMaxUploadKb", demo.maxUploadKb());
+    }
     return body;
   }
 
