@@ -49,6 +49,13 @@ sees only its own data.
   apart; more rows than movements = ambiguous, counted, nothing added); the bank's balance rebuilds the balance history.
   A rate limit of the bank pauses the link for 6 hours; a consent about to end sends one mail 7 days before (if mail
   is on and the account has an email). Every movement says where it comes from (`source`: `FILE`, `MANUAL`, `BANK`).
+- **Money accounts**: `GET /api/money-accounts` lists every account with its rows by source, first and last day,
+  last balance and currency, and the `id` of its page (12 hex characters of the SHA-256 of the name: the name never
+  goes in a URL). `GET /api/money-accounts/{id}` gives balance, this month's money in and out and whether a bank
+  imports there; `GET /api/money-accounts/{id}/balances?from=` the balance at the end of each day;
+  `POST /api/money-accounts/{id}/movements` `{"q","kind":"ALL|IN|OUT","offset","limit"}` the movements newest first,
+  searched by words of the description or by amount (the search travels in the body). `POST /api/money-accounts/delete`
+  `{"name","confirm"}` deletes an account no bank imports into.
 - **Real estate**: CRUD with total estimated value.
 - **Monte Carlo**: projection of the portfolio from its historical monthly returns (percentiles P5-P95).
 - **Accounts**: registration and login with a JWT, optional "Accedi con GitHub" (an account is found again only by a
