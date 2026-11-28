@@ -88,6 +88,7 @@ class SecurityTests {
     all.add(body(get("/api/montecarlo").param("years", "1").param("simulations", "200"), auth));
     all.add(body(get("/api/realestate"), auth));
     all.add(body(get("/api/assets"), auth));
+    all.add(body(get("/api/plans"), auth));
     return all;
   }
 
@@ -121,6 +122,7 @@ class SecurityTests {
     mvc.perform(get("/api/assets").header("Authorization", bob)).andExpect(jsonPath("$.otherAssets", hasSize(0)))
         .andExpect(jsonPath("$.debts", hasSize(0))).andExpect(jsonPath("$.totals[0].net").value(0));
     mvc.perform(get("/api/realestate/{id}", aliceFlat).header("Authorization", bob)).andExpect(status().isNotFound());
+    mvc.perform(get("/api/plans").header("Authorization", bob)).andExpect(jsonPath("$.plans", hasSize(0)));
 
     // bob writes with alice's names and ids: only his schema changes
     mvc.perform(put("/api/realestate/{id}", aliceFlat).header("Authorization", bob).contentType(MediaType.APPLICATION_JSON)

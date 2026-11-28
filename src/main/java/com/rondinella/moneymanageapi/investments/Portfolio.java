@@ -71,9 +71,10 @@ public class Portfolio {
   /**
    * {@code xirr}: money-weighted, a year; {@code simple}: (value + sold - bought) / bought; {@code twr}:
    * time-weighted, the whole period, and {@code twrYearly} the same a year. {@code days}: from the first purchase.
+   * {@code netInLastYear}: purchases with their fees minus sales net of them, in the 12 months up to today.
    */
   public record Performance(LocalDate since, long days, Double xirr, BigDecimal simpleGain, Double simple, Double twr,
-                            Double twrYearly) {
+                            Double twrYearly, BigDecimal netInLastYear) {
   }
 
   /** One ISIN against its target: percent of the portfolio now and wanted; {@code gap} > 0: buy about that much. */
@@ -138,8 +139,15 @@ public class Portfolio {
   }
 
   public Answer compute(LocalDate today) {
+    return compute(today, true);
+  }
+
+  /** {@code refresh}: ask the market for prices older than a week first (false: only what is in the database) */
+  public Answer compute(LocalDate today, boolean refresh) {
     List<String> isins = transactions.findDistinctIsin();
-    prices.refresh(isins);
+    if (refresh) {
+      prices.refresh(isins);
+    }
     Map<String, BigDecimal> wanted = targetMap();
 
     Map<String, Book> books = new LinkedHashMap<>();
@@ -279,7 +287,7 @@ public class Portfolio {
     List<Returns.Flow> flows = new ArrayList<>();
     books.values().forEach(b -> flows.addAll(b.flows));
     if (flows.isEmpty()) {
-      return new Performance(null, 0, null, BigDecimal.ZERO, null, null, null);
+      return new Performance(null, 0, null, BigDecimal.ZERO, null, null, null, BigDecimal.ZERO.setScale(2));
     }
     LocalDate since = flows.stream().map(Returns.Flow::date).min(LocalDate::compareTo).orElseThrow();
     if (since.isAfter(today)) {
@@ -333,8 +341,11 @@ public class Portfolio {
     }
     BigDecimal simpleGain = totals.value().add(totals.sold()).subtract(totals.bought());
     Double twr = Returns.timeWeighted(start, valuations, flows);
+    LocalDate yearAgo = today.minusYears(1);
+    double lastYear = flows.stream().filter(f -> f.date().isAfter(yearAgo) && !f.date().isAfter(today))
+        .mapToDouble(f -> -f.amount()).sum();
     return new Performance(since, days, Returns.xirr(withToday), simpleGain, share(simpleGain, totals.bought()), twr,
-        Returns.yearly(twr, days));
+        Returns.yearly(twr, days), money(BigDecimal.valueOf(lastYear)));
   }
 
   private Allocation allocation(List<Position> positions, Map<String, Book> books, Map<String, Instruments.View> views,
