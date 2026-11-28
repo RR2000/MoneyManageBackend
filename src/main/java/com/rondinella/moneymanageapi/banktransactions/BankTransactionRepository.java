@@ -50,6 +50,11 @@ public interface BankTransactionRepository extends JpaRepository<BankTransaction
       + "GROUP BY t.account, t.source")
   List<Object[]> countByAccountAndSource();
 
+  /** currencies of every account, the most used first */
+  @Query("SELECT t.account, t.currency, count(t) FROM BankTransaction t WHERE t.currency IS NOT NULL "
+      + "GROUP BY t.account, t.currency ORDER BY count(t) DESC")
+  List<Object[]> countByAccountAndCurrency();
+
   @Transactional
   @Modifying(flushAutomatically = true, clearAutomatically = true)
   @Query("DELETE FROM BankTransaction t WHERE t.account = :account")

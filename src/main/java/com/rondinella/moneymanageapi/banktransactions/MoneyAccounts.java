@@ -8,6 +8,7 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.math.BigDecimal;
 import java.sql.Timestamp;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -28,9 +29,12 @@ import java.util.stream.Collectors;
 @Service
 public class MoneyAccounts {
 
-  /** One money account: rows by source, first and last day, and whether a bank account imports into it. */
+  /**
+   * One money account: rows by source, first and last day, whether a bank account imports into it, the id of its
+   * page (a hash of the name, see {@link AccountPages#idOf}), the last known balance and its currency (the most used).
+   */
   public record Summary(String name, long rows, long fileRows, long manualRows, long bankRows, LocalDate firstDate,
-                       LocalDate lastDate, boolean linked) {
+                       LocalDate lastDate, boolean linked, String id, BigDecimal balance, String currency) {
   }
 
   public record Deleted(String name, long rows) {
@@ -73,8 +77,14 @@ public class MoneyAccounts {
       }
     }
     List<Summary> result = new ArrayList<>();
+    Map<String, String> currencies = new HashMap<>();
+    for (Object[] row : transactions.countByAccountAndCurrency()) {
+      // ordered by count: the first currency of an account is its most used
+      currencies.putIfAbsent((String) row[0], (String) row[1]);
+    }
     counts.forEach((name, c) -> result.add(new Summary(name, c[0] + c[1] + c[2], c[0], c[1], c[2],
-        day(days.get(name)[0]), day(days.get(name)[1]), linked.contains(name))));
+        day(days.get(name)[0]), day(days.get(name)[1]), linked.contains(name), AccountPages.idOf(name),
+        balance(name), currencies.getOrDefault(name, "EUR"))));
     result.sort(Comparator.comparing(Summary::name, String.CASE_INSENSITIVE_ORDER).thenComparing(Summary::name));
     return result;
   }
@@ -106,6 +116,16 @@ public class MoneyAccounts {
   private Set<String> linked() {
     return bankAccounts.findAll().stream().map(BankLinkAccount::getMoneyAccount).filter(Objects::nonNull)
         .collect(Collectors.toSet());
+  }
+
+  /** the balance of the last day with one, or of the newest movement */
+  BigDecimal balance(String name) {
+    DailyBalance last = dailyBalances.findFirstByAccountOrderByDateDesc(name);
+    if (last != null) {
+      return last.getBalance();
+    }
+    BankTransaction newest = transactions.findFirstByAccountOrderByDatetimeDescIdDesc(name);
+    return newest == null ? null : newest.getCumulativeAmount();
   }
 
   private static LocalDate day(Timestamp t) {
