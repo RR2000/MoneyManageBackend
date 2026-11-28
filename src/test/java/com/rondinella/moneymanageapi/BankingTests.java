@@ -4,6 +4,9 @@ import com.rondinella.moneymanageapi.auth.AuthService;
 import com.rondinella.moneymanageapi.auth.mail.Mailer;
 import com.rondinella.moneymanageapi.banking.BankAuthStates;
 import com.rondinella.moneymanageapi.banking.BankingService;
+import com.rondinella.moneymanageapi.banktransactions.AccountPages;
+import com.rondinella.moneymanageapi.banktransactions.BankTransaction;
+import com.rondinella.moneymanageapi.banktransactions.BankTransactionDto;
 import com.rondinella.moneymanageapi.tenant.TenantSchemas;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
@@ -16,6 +19,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -55,7 +59,6 @@ import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
-import static org.hamcrest.Matchers.containsString;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -77,6 +80,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
     "app.auth.max-registrations=10000"})
 @AutoConfigureMockMvc
 @ExtendWith(OutputCaptureExtension.class)
+@Import(ManualMovements.class)
 class BankingTests {
 
   static final long ALICE_ID = 990001;
@@ -106,6 +110,8 @@ class BankingTests {
   static final String APP_REFUSED_MESSAGE = "Application is not active, see the control panel";
   static final HttpServer SERVER = server();
 
+  @Autowired
+  ManualMovements movements;
   @Autowired
   MockMvc mvc;
   @Autowired
@@ -558,8 +564,7 @@ class BankingTests {
          {"account":"Con_file","datetime":"2026-11-11T00:00:00.000+00:00","description":"BENZINA FINTA","amount":-30.00,"currency":"EUR"},
          {"account":"Con_file","datetime":"2026-11-12T08:00:00.000+00:00","description":"CAFFE 1","amount":-1.50,"currency":"EUR"},
          {"account":"Con_file","datetime":"2026-11-12T09:00:00.000+00:00","description":"CAFFE 2","amount":-1.50,"currency":"EUR"}]""";
-    mvc.perform(post("/api/banks/transactions").header("Authorization", alice).contentType(MediaType.APPLICATION_JSON)
-        .content(file)).andExpect(status().isCreated());
+    movements.add(alice, file);
     assertEquals(4, rows("Con_file"));
 
     PAGES.put("", page(null,
@@ -583,9 +588,10 @@ class BankingTests {
         + ".bank_transaction WHERE description = 'BENZINA FINTA'", String.class));
 
     // the movements API says where each row comes from
-    mvc.perform(get("/api/banks/transactions/accounts/Con_file").header("Authorization", alice))
-        .andExpect(jsonPath("$[?(@.description == 'Bonifico finto')].source").value("BANK"))
-        .andExpect(jsonPath("$[?(@.description == 'CAFFE 1')].source").value("MANUAL"));
+    mvc.perform(post("/api/money-accounts/{id}/movements", AccountPages.idOf("Con_file")).header("Authorization", alice)
+            .contentType(MediaType.APPLICATION_JSON).content("{}"))
+        .andExpect(jsonPath("$.items[?(@.description == 'Bonifico finto')].source").value("BANK"))
+        .andExpect(jsonPath("$.items[?(@.description == 'CAFFE 1')].source").value("MANUAL"));
 
     // the same again: nothing new, nothing matched twice
     JsonNode again = json(post("/api/banking/sync"));
@@ -737,15 +743,13 @@ class BankingTests {
         [{"account":"Doppio","datetime":"2026-11-10T00:00:00.000+00:00","description":"PAGAMENTO POS","amount":-2.00,"currency":"EUR"},
          {"account":"Doppio","datetime":"2026-11-10T00:00:00.000+00:00","description":"PAGAMENTO POS","amount":-2.00,"currency":"EUR"}]""";
     for (int i = 0; i < 2; i++) {
-      mvc.perform(post("/api/banks/transactions").header("Authorization", alice).contentType(MediaType.APPLICATION_JSON)
-          .content(twice)).andExpect(status().isCreated());
+      movements.add(alice, twice);
     }
     assertEquals(2, rows("Doppio"));
     // one row with a corrected amount: updates the first, adds nothing (as before the id)
-    mvc.perform(post("/api/banks/transactions").header("Authorization", alice).contentType(MediaType.APPLICATION_JSON)
-        .content("""
-            [{"account":"Doppio","datetime":"2026-11-10T00:00:00.000+00:00","description":"PAGAMENTO POS","amount":-3.00,"currency":"EUR"}]"""))
-        .andExpect(status().isCreated()).andExpect(content().string(containsString("\"source\":\"MANUAL\"")));
+    List<BankTransactionDto> corrected = movements.add(alice, """
+        [{"account":"Doppio","datetime":"2026-11-10T00:00:00.000+00:00","description":"PAGAMENTO POS","amount":-3.00,"currency":"EUR"}]""");
+    assertEquals(BankTransaction.Source.MANUAL, corrected.getFirst().getSource());
     assertEquals(List.of("-3.0000", "-2.0000"), jdbc.queryForList("SELECT amount::text FROM " + SCHEMA
         + ".bank_transaction WHERE account = 'Doppio' ORDER BY id", String.class));
   }
@@ -959,12 +963,10 @@ class BankingTests {
   @Test
   void moneyAccountsAreListedAndDeletedOnlyWithTheNameTypedAgain() throws Exception {
     String bob = register();
-    mvc.perform(post("/api/banks/transactions").header("Authorization", bob).contentType(MediaType.APPLICATION_JSON)
-        .content("""
-            [{"account":"Conto vecchio","datetime":"2026-01-10T00:00:00.000+00:00","description":"Riga 1","amount":-2.00,"currency":"EUR"},
-             {"account":"Conto vecchio","datetime":"2026-02-10T00:00:00.000+00:00","description":"Riga 2","amount":5.00,"currency":"EUR"},
-             {"account":"Da tenere","datetime":"2026-03-10T00:00:00.000+00:00","description":"Riga 3","amount":1.00,"currency":"EUR"}]"""))
-        .andExpect(status().isCreated());
+    movements.add(bob, """
+        [{"account":"Conto vecchio","datetime":"2026-01-10T00:00:00.000+00:00","description":"Riga 1","amount":-2.00,"currency":"EUR"},
+         {"account":"Conto vecchio","datetime":"2026-02-10T00:00:00.000+00:00","description":"Riga 2","amount":5.00,"currency":"EUR"},
+         {"account":"Da tenere","datetime":"2026-03-10T00:00:00.000+00:00","description":"Riga 3","amount":1.00,"currency":"EUR"}]""");
     mvc.perform(post("/api/banks/transactions/accounts/Conto vecchio/balance").header("Authorization", bob)
         .contentType(MediaType.APPLICATION_JSON).content("{\"amountToday\":100}")).andExpect(status().isOk());
 
@@ -992,8 +994,8 @@ class BankingTests {
         .andExpect(status().isOk()).andExpect(jsonPath("$.rows").value(2));
     mvc.perform(get("/api/money-accounts").header("Authorization", bob))
         .andExpect(jsonPath("$.length()").value(1)).andExpect(jsonPath("$[0].name").value("Da tenere"));
-    mvc.perform(get("/api/banks/transactions/daily-balance/Conto vecchio").header("Authorization", bob))
-        .andExpect(jsonPath("$.length()").value(0));
+    assertEquals(0, jdbc.queryForObject("SELECT count(*) FROM " + movements.schemaOf(bob)
+        + ".daily_balance WHERE account = 'Conto vecchio'", Integer.class));
     mvc.perform(post("/api/money-accounts/delete").header("Authorization", bob).contentType(MediaType.APPLICATION_JSON)
             .content("{\"name\":\"Conto vecchio\",\"confirm\":\"Conto vecchio\"}"))
         .andExpect(status().isNotFound()).andExpect(status().reason("ACCOUNT_NOT_FOUND"));

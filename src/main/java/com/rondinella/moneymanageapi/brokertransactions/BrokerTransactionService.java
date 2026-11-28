@@ -3,20 +3,15 @@ package com.rondinella.moneymanageapi.brokertransactions;
 import com.rondinella.moneymanageapi.banktransactions.BankTransactionService;
 import com.rondinella.moneymanageapi.common.Utils;
 import com.rondinella.moneymanageapi.common.dtos.GraphPointsDto;
-import com.rondinella.moneymanageapi.common.marketdata.MarketData;
-import com.rondinella.moneymanageapi.stocks.ParentStock;
 import com.rondinella.moneymanageapi.stocks.Stock;
 import com.rondinella.moneymanageapi.stocks.StockPrices;
-import lombok.SneakyThrows;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
-import java.io.IOException;
 import java.math.BigDecimal;
 import java.sql.Timestamp;
 import java.util.ArrayList;
-import java.util.Currency;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -31,8 +26,6 @@ public class BrokerTransactionService {
   }
 
   final
-  MarketData marketData;
-  final
   BrokerTransactionRepository brokerTransactionRepository;
   final
   BankTransactionService bankTransactionService;
@@ -40,11 +33,10 @@ public class BrokerTransactionService {
   StockPrices stockPrices;
 
   public BrokerTransactionService(BrokerTransactionRepository brokerTransactionRepository, BankTransactionService bankTransactionService,
-                                  MarketData marketData, StockPrices stockPrices) {
+                                  StockPrices stockPrices) {
     this.brokerTransactionRepository = brokerTransactionRepository;
     this.stockPrices = stockPrices;
     this.bankTransactionService = bankTransactionService;
-    this.marketData = marketData;
   }
 
   public List<String> findAllIsin() {
@@ -87,53 +79,6 @@ public class BrokerTransactionService {
     result.addTotalColumn("Total Worth", isinList);
 
     return result;
-  }
-
-  @SneakyThrows
-  public BigDecimal worthAtDatetime(Timestamp datetime) {
-    List<String> isinList = findAllIsin();
-    BigDecimal worth = BigDecimal.ZERO;
-    ParentStock usdEur = luckySearchStock("USD/EUR");
-    for (String isin : isinList) {
-      String stockTicker = luckySearchTicker(isin);
-      ParentStock parentStock = marketData.get(stockTicker, Utils.toCalendar(datetime));
-      BigDecimal thanValue = parentStock.getHistory().get(0).getClose();
-      BigDecimal isinQuantity = brokerTransactionRepository.totalQuantityByIsinGreaterThan(isin, datetime);
-      isinQuantity = isinQuantity == null ? BigDecimal.ZERO : isinQuantity;
-      if (parentStock.getCurrency() == Currency.getInstance("USD"))
-        thanValue = thanValue.multiply(usdEur.getClose());
-      worth = worth.add(thanValue.multiply(isinQuantity));
-    }
-
-    return worth;
-  }
-
-  public BigDecimal worthRightNow() {
-    List<String> isinList = findAllIsin();
-    BigDecimal worth = BigDecimal.ZERO;
-    ParentStock usdEur = luckySearchStock("USD/EUR");
-    for (String isin : isinList) {
-      ParentStock parentStock = luckySearchStock(isin);
-      BigDecimal isinQuantity = brokerTransactionRepository.totalQuantityByIsin(isin);
-      BigDecimal nowValue = parentStock.getClose();
-      if (parentStock.getCurrency() == Currency.getInstance("USD"))
-        nowValue = nowValue.multiply(usdEur.getClose());
-      worth = worth.add(nowValue.multiply(isinQuantity));
-    }
-
-    return worth;
-  }
-
-  public String luckySearchTicker(String query) {
-    return marketData.luckySearchTicker(query);
-  }
-
-  public ParentStock luckySearchStock(String query) {
-    try {
-      return marketData.get(luckySearchTicker(query));
-    } catch (IOException e) {
-      return null;
-    }
   }
 
   /**

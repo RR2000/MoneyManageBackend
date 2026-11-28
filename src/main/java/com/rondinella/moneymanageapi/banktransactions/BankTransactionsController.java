@@ -1,7 +1,6 @@
 package com.rondinella.moneymanageapi.banktransactions;
 
 import com.rondinella.moneymanageapi.banktransactions.BankTransactionService.BankName;
-import io.swagger.v3.oas.annotations.Parameter;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -9,8 +8,6 @@ import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
-import java.sql.Timestamp;
-import java.util.List;
 
 @RestController
 @RequestMapping(path = "/api/banks/transactions", produces = "application/json")
@@ -20,16 +17,6 @@ public class BankTransactionsController {
 
   public BankTransactionsController(BankTransactionService bankTransactionService) {
     this.bankTransactionService = bankTransactionService;
-  }
-
-  @GetMapping
-  public ResponseEntity<?> getAllTransactions() {
-    return new ResponseEntity<>(bankTransactionService.findAllTransactions(), HttpStatus.OK);
-  }
-
-  @GetMapping("/accounts/{accountName}")
-  public ResponseEntity<?> getTransactionsByAccountName(@PathVariable String accountName) {
-    return new ResponseEntity<>(bankTransactionService.findTransactionsByAccount(accountName), HttpStatus.OK);
   }
 
   /** Today's balance of the account, in the body: an amount in the URL would end up in the access logs. */
@@ -44,43 +31,13 @@ public class BankTransactionsController {
     return new ResponseEntity<>(bankTransactionService.computeCumulativeAmount(accountName, body.amountToday()), HttpStatus.OK);
   }
 
-  @GetMapping("/accounts/{accountName}/{timestamp}")
-  public ResponseEntity<?> getTransactionsByAccountName(@PathVariable String accountName, @PathVariable Timestamp timestamp) {
-    return new ResponseEntity<>(bankTransactionService.amountOnThatDay(accountName, timestamp), HttpStatus.OK);
-  }
-
-  @GetMapping("graph/{fromTimestamp}/{toTimestamp}")
-  public ResponseEntity<?> historyBetweenDatesGraph(
-      @PathVariable @Parameter(example = "2024-01-01 00:00:00.000") Timestamp fromTimestamp,
-      @PathVariable @Parameter(example = "2024-03-31 23:59:59.999") Timestamp toTimestamp) {
-    return new ResponseEntity<>(bankTransactionService.historyBetweenDates(fromTimestamp, toTimestamp), HttpStatus.OK);
-  }
-
-  @GetMapping("table/{fromTimestamp}/{toTimestamp}")
-  public ResponseEntity<?> historyBetweenDatesTable(
-      @PathVariable @Parameter(example = "2024-01-01 00:00:00.000") Timestamp fromTimestamp,
-      @PathVariable @Parameter(example = "2024-03-31 23:59:59.999") Timestamp toTimestamp,
-      @RequestParam String accountName) {
-    return new ResponseEntity<>(bankTransactionService.historyBetweenDates(fromTimestamp, toTimestamp, accountName), HttpStatus.OK);
-  }
-
   @GetMapping("/accounts")
   public ResponseEntity<?> getAllAccounts() {
     return ResponseEntity.status(HttpStatus.OK).body(bankTransactionService.findAllAccounts());
   }
 
-  @PostMapping
-  public ResponseEntity<?> createTransaction(@RequestBody List<BankTransactionDto> transactionsDto) {
-    return ResponseEntity.status(HttpStatus.CREATED).body(bankTransactionService.addTransactions(transactionsDto));
-  }
-
   @PostMapping(value = "/{bankName}/upload", consumes = "multipart/form-data")
   public ResponseEntity<?> uploadTransactions(@RequestParam MultipartFile multipartFile, @PathVariable BankName bankName) {
     return ResponseEntity.status(HttpStatus.CREATED).body(bankTransactionService.addTransactionsFromMultipartFile(multipartFile, bankName));
-  }
-
-  @GetMapping("/daily-balance/{accountName}")
-  public ResponseEntity<?> getDailyBalance(@PathVariable String accountName) {
-    return ResponseEntity.ok(bankTransactionService.getDailyBalance(accountName));
   }
 }

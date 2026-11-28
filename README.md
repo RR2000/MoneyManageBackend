@@ -1,7 +1,8 @@
 # Money Manage - backend
 
-Personal finance dashboard: bank and broker movements imported from the banks' export files, balances over
-time, a portfolio graph, real estate, other assets and debts, and a Monte Carlo projection of the portfolio.
+Personal finance: the net worth, bank and broker movements imported from the banks' export files (or straight from
+the bank), balances over time, investments, real estate, other assets and debts, fixed costs and a plan with its
+projection.
 This is the REST API (Spring Boot); the web app is in
 [money-manage-app](https://github.com/RR2000/money-manage-app).
 
@@ -24,14 +25,14 @@ sees only its own data.
   the same file again, or the same executions exported in another language, add nothing (by Order ID; rows imported
   before it was read are found by moment, ISIN, quantity and price and get it), and two fills of one order in the
   same minute are two rows.
-- **Broker**: Degiro transactions CSV (`POST /api/brokers/transactions/upload`), worth over time from the
-  prices of each ISIN. Weekly prices, kept in the database, come from Alpha Vantage (`MONEY_PRICES_API_KEY`, free
+- **Broker**: Degiro transactions CSV (`POST /api/brokers/transactions/upload`), valued at the prices of each
+  ISIN. Weekly prices, kept in the database, come from Alpha Vantage (`MONEY_PRICES_API_KEY`, free
   plan: 25 requests a day and one a second, counted and queued by the backend), with Yahoo Finance as last resort.
   The Alpha Vantage symbol of an ISIN is found once: listings from OpenFIGI (no key, kept for good for everybody),
   turned into symbols by exchange (London `.LON`, Amsterdam `.AMS`, XETRA `.DEX`...) and checked with one
   SYMBOL_SEARCH, preferring a listing in euro. Prices are asked only for an ISIN without prices or with prices older
   than a week, at most once a day per ISIN (also after a failure), all at once and for at most 3 s per request; a
-  slower download ends in the background and the graph shows what is there. An ISIN without prices is left out, not
+  slower download ends in the background and the page shows what is there. An ISIN without prices is left out, not
   an error. On the investments page (`/api/instruments`) the symbol can be set by hand after a preview of its last
   price, a quote currency other than the euro is flagged (never converted), and prices can be imported from a CSV
   (`date,price` per line).
@@ -164,8 +165,6 @@ sees only its own data.
   next month to the target month; the projection only leaves out the others), `EVENT_AMOUNT` (not 0, two decimals),
   `EVENT_LABEL` (60), `TOO_MANY` (20 plans), `TOO_MANY_VERSIONS` (1000). The sample data come with a plan in two versions,
   saved 12 and 5 months before. Only euro, as on the investments page.
-- **Monte Carlo** (old dashboard): `GET /api/montecarlo` projects the portfolio from its historical monthly returns
-  without payments (percentiles P5-P95); the plan has the one with payments and events.
 - **Accounts**: registration and login with a JWT, optional "Accedi con GitHub" (an account is found again only by a
   verified GitHub email), optional "forgot password" by email (`POST /api/auth/password/forgot`, then
   `/api/auth/password/reset` with the token of the link). The account's email is set from a confirmation link

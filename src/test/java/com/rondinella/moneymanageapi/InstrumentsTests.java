@@ -41,7 +41,18 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class InstrumentsTests {
 
   private static final Pattern TOKEN = Pattern.compile("\"token\"\\s*:\\s*\"([^\"]+)\"");
-  private static final String GRAPH = "/api/brokers/transactions/worth/graph";
+  /** the investments page: positions with their last price and value, history with the worth of each ISIN */
+  private static final String INVESTMENTS = "/api/investments";
+
+  /** a field of the position of the ISIN, as a list (empty when the ISIN is not there) */
+  private static String position(String isin, String field) {
+    return "$.positions[?(@.isin == '" + isin + "')]." + field;
+  }
+
+  /** the worth of the ISIN at every point of the history (the days it was held) */
+  private static String history(String isin) {
+    return "$.history[*].byIsin['" + isin + "']";
+  }
   private static final Currency EUR = Currency.getInstance("EUR");
   private static final Currency USD = Currency.getInstance("USD");
 
@@ -116,9 +127,10 @@ class InstrumentsTests {
     buy(auth, isin);
     listedInLondonAndAmsterdam(isin);
 
-    mvc.perform(get(GRAPH).header("Authorization", auth)).andExpect(status().isOk())
-        .andExpect(jsonPath("$.uniqueGraphNames", hasItem(isin)))
-        .andExpect(jsonPath("$.graphData['" + isin + "'].*", everyItem(comparesEqualTo(1000.0))));
+    mvc.perform(get(INVESTMENTS).header("Authorization", auth)).andExpect(status().isOk())
+        .andExpect(jsonPath(position(isin, "value"), contains(comparesEqualTo(1000.0))))
+        .andExpect(jsonPath(history(isin), not(empty())))
+        .andExpect(jsonPath(history(isin), everyItem(comparesEqualTo(1000.0))));
     mvc.perform(get("/api/instruments").header("Authorization", auth)).andExpect(status().isOk())
         .andExpect(jsonPath("$.alphaVantage").value(true))
         .andExpect(jsonPath("$.instruments[0].isin").value(isin))
@@ -127,7 +139,7 @@ class InstrumentsTests {
         .andExpect(jsonPath("$.instruments[0].currencyWarning").value(false))
         .andExpect(jsonPath("$.instruments[0].source").value("alphavantage"))
         .andExpect(jsonPath("$.instruments[0].lastPrice").value(100.0));
-    mvc.perform(get(GRAPH).header("Authorization", auth)).andExpect(status().isOk());
+    mvc.perform(get(INVESTMENTS).header("Authorization", auth)).andExpect(status().isOk());
     verify(alphaVantage, times(1)).search(anyString());
     verify(alphaVantage, times(1)).weekly(anyString(), anyString(), any());
     verify(yahoo, never()).weekly(anyString());
@@ -135,7 +147,8 @@ class InstrumentsTests {
     // another user with the same ISIN: OpenFIGI is not asked again (its answers are kept for everybody)
     String other = register();
     buy(other, isin);
-    mvc.perform(get(GRAPH).header("Authorization", other)).andExpect(jsonPath("$.uniqueGraphNames", hasItem(isin)));
+    mvc.perform(get(INVESTMENTS).header("Authorization", other))
+        .andExpect(jsonPath(position(isin, "lastPrice"), contains(comparesEqualTo(100.0))));
     verify(openFigi, times(1)).listings(isin);
   }
 
@@ -158,8 +171,9 @@ class InstrumentsTests {
         new AlphaVantage.Match("IWDA.AMS", "iShares Core MSCI World", "Amsterdam", EUR)));
     when(alphaVantage.weekly(eq("IWDA.AMS"), eq(isin), any())).thenReturn(weekly("IWDA.AMS", isin, "100", EUR));
 
-    mvc.perform(get(GRAPH).header("Authorization", auth))
-        .andExpect(jsonPath("$.graphData['" + isin + "'].*", everyItem(comparesEqualTo(1000.0))));
+    mvc.perform(get(INVESTMENTS).header("Authorization", auth))
+        .andExpect(jsonPath(history(isin), not(empty())))
+        .andExpect(jsonPath(history(isin), everyItem(comparesEqualTo(1000.0))));
     mvc.perform(get("/api/instruments").header("Authorization", auth))
         .andExpect(jsonPath("$.instruments[0].symbol").value("IWDA.AMS"))
         .andExpect(jsonPath("$.instruments[0].currencyWarning").value(false));
@@ -176,7 +190,7 @@ class InstrumentsTests {
         new AlphaVantage.Match("SWDA.LON", "iShares Core MSCI World", "United Kingdom", null)));
     when(alphaVantage.weekly(eq("SWDA.LON"), eq(isin), any())).thenReturn(weekly("SWDA.LON", isin, "10243", null));
 
-    mvc.perform(get(GRAPH).header("Authorization", auth)).andExpect(status().isOk());
+    mvc.perform(get(INVESTMENTS).header("Authorization", auth)).andExpect(status().isOk());
     mvc.perform(get("/api/instruments").header("Authorization", auth))
         .andExpect(jsonPath("$.instruments[0].symbol").value("SWDA.LON"))
         .andExpect(jsonPath("$.instruments[0].quoteCurrency").doesNotExist())
@@ -192,8 +206,8 @@ class InstrumentsTests {
     when(alphaVantage.search("ABCD")).thenThrow(new IOException("Alpha Vantage: daily limit reached"));
     when(yahoo.weekly(isin)).thenReturn(new YahooPrices.Prices("ABCD.L", EUR, weekly("ABCD.L", isin, "7", EUR)));
 
-    mvc.perform(get(GRAPH).header("Authorization", auth)).andExpect(status().isOk())
-        .andExpect(jsonPath("$.uniqueGraphNames", hasItem(isin)));
+    mvc.perform(get(INVESTMENTS).header("Authorization", auth)).andExpect(status().isOk())
+        .andExpect(jsonPath(position(isin, "lastPrice"), contains(comparesEqualTo(7.0))));
     mvc.perform(get("/api/instruments").header("Authorization", auth))
         .andExpect(jsonPath("$.instruments[0].source").value("yahoo"));
     verify(yahoo, times(1)).weekly(isin);
@@ -205,7 +219,8 @@ class InstrumentsTests {
     String isin = isin();
     buy(auth, isin);
     listedInLondonAndAmsterdam(isin);
-    mvc.perform(get(GRAPH).header("Authorization", auth)).andExpect(jsonPath("$.uniqueGraphNames", hasItem(isin)));
+    mvc.perform(get(INVESTMENTS).header("Authorization", auth))
+        .andExpect(jsonPath(position(isin, "lastPrice"), contains(comparesEqualTo(100.0))));
     when(alphaVantage.weekly(eq("IWDA.LON"), anyString(), any())).thenReturn(weekly("IWDA.LON", "", "110", USD));
     when(alphaVantage.search("IWDA.LON")).thenReturn(List.of(
         new AlphaVantage.Match("IWDA.LON", "iShares Core MSCI World", "United Kingdom", USD)));
@@ -227,8 +242,10 @@ class InstrumentsTests {
     // the preview was enough: saving asked nothing more (Alpha Vantage allows 25 requests a day)
     verify(alphaVantage, times(1)).weekly(eq("IWDA.LON"), anyString(), any());
     verify(alphaVantage, times(1)).search("IWDA.LON");
-    mvc.perform(get(GRAPH).header("Authorization", auth))
-        .andExpect(jsonPath("$.graphData['" + isin + "'].*", everyItem(comparesEqualTo(1100.0))));
+    // the new prices, in dollars: worth 1100 but out of the totals in euro
+    mvc.perform(get(INVESTMENTS).header("Authorization", auth))
+        .andExpect(jsonPath(position(isin, "value"), contains(comparesEqualTo(1100.0))))
+        .andExpect(jsonPath(position(isin, "excluded")).value("CURRENCY"));
 
     // somebody else's ISIN, or a symbol that is not one
     mvc.perform(put("/api/instruments/{isin}/symbol", "IE0000000000").header("Authorization", auth)
@@ -252,8 +269,8 @@ class InstrumentsTests {
         .andExpect(jsonPath("$.instruments[0].source").value("csv"))
         .andExpect(jsonPath("$.instruments[0].lastPrice").value(71.0))
         .andExpect(jsonPath("$.instruments[0].quoteCurrency").value("EUR"));
-    mvc.perform(get(GRAPH).header("Authorization", auth))
-        .andExpect(jsonPath("$.graphData['" + isin + "'].*", hasItems(comparesEqualTo(705.0), comparesEqualTo(710.0))));
+    mvc.perform(get(INVESTMENTS).header("Authorization", auth))
+        .andExpect(jsonPath(history(isin), hasItems(comparesEqualTo(705.0), comparesEqualTo(710.0))));
 
     mvc.perform(post("/api/instruments/{isin}/prices", isin).header("Authorization", auth).contentType("text/csv")
             .content("2024-01-01,10\nnot a line\n"))

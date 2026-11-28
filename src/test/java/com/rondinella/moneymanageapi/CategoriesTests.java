@@ -6,6 +6,7 @@ import com.rondinella.moneymanageapi.tenant.TenantSchemas;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -29,10 +30,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /** Categories, rules, the category of the movements and the fixed costs. Made-up data only. */
 @SpringBootTest(properties = "app.auth.max-registrations=10000")
 @AutoConfigureMockMvc
+@Import(ManualMovements.class)
 class CategoriesTests {
 
   private static final JsonMapper JSON = JsonMapper.builder().build();
 
+  @Autowired
+  ManualMovements movements;
   @Autowired
   MockMvc mvc;
   @Autowired
@@ -75,9 +79,8 @@ class CategoriesTests {
     assertEquals(0, new BigDecimal(expected).compareTo(actual.decimalValue()), expected + " != " + actual);
   }
 
-  private void upload(String auth, String json) throws Exception {
-    mvc.perform(post("/api/banks/transactions").header("Authorization", auth).contentType(MediaType.APPLICATION_JSON)
-        .content(json)).andExpect(status().isCreated());
+  private void upload(String auth, String json) {
+    movements.add(auth, json);
   }
 
   private static String movement(String account, String day, String description, String amount) {
