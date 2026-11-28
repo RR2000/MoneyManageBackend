@@ -87,7 +87,7 @@ class SecurityTests {
     all.add(body(get("/api/brokers/transactions/worth/graph"), auth));
     all.add(body(get("/api/montecarlo").param("years", "1").param("simulations", "200"), auth));
     all.add(body(get("/api/realestate"), auth));
-    all.add(body(get("/api/realestate/worth"), auth));
+    all.add(body(get("/api/assets"), auth));
     return all;
   }
 
@@ -118,7 +118,8 @@ class SecurityTests {
     mvc.perform(get("/api/montecarlo").header("Authorization", bob))
         .andExpect(status().isOk()).andExpect(jsonPath("$.uniqueGraphNames", anyOf(nullValue(), hasSize(0))));
     mvc.perform(get("/api/realestate").header("Authorization", bob)).andExpect(jsonPath("$", hasSize(0)));
-    mvc.perform(get("/api/realestate/worth").header("Authorization", bob)).andExpect(content().string("0"));
+    mvc.perform(get("/api/assets").header("Authorization", bob)).andExpect(jsonPath("$.otherAssets", hasSize(0)))
+        .andExpect(jsonPath("$.debts", hasSize(0))).andExpect(jsonPath("$.totals[0].net").value(0));
     mvc.perform(get("/api/realestate/{id}", aliceFlat).header("Authorization", bob)).andExpect(status().isNotFound());
 
     // bob writes with alice's names and ids: only his schema changes

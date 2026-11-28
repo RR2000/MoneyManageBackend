@@ -1,5 +1,6 @@
 package com.rondinella.moneymanageapi.demo;
 
+import com.rondinella.moneymanageapi.assets.Assets;
 import com.rondinella.moneymanageapi.banktransactions.BankTransactionDto;
 import com.rondinella.moneymanageapi.banktransactions.BankTransactionService;
 import com.rondinella.moneymanageapi.brokertransactions.BrokerTransaction;
@@ -24,7 +25,7 @@ import java.util.Random;
 /**
  * Made-up data for a new account, so the dashboard has something to show: a year of movements on two bank
  * accounts, a fake ETF bought every month (a few sold four months ago) and a fake bond ETF bought every three months
- * (with their own fake price history, no market data calls) and a flat.
+ * (with their own fake price history, no market data calls), a flat, a car, some gold and a car loan.
  * Every name says "esempio": nothing here is real.
  */
 @Service
@@ -42,13 +43,15 @@ public class SampleData {
   private final BrokerTransactionRepository brokerTransactionRepository;
   private final StockRepository stockRepository;
   private final RealEstateService realEstateService;
+  private final Assets assets;
 
   public SampleData(BankTransactionService bankTransactionService, BrokerTransactionRepository brokerTransactionRepository,
-                    StockRepository stockRepository, RealEstateService realEstateService) {
+                    StockRepository stockRepository, RealEstateService realEstateService, Assets assets) {
     this.bankTransactionService = bankTransactionService;
     this.brokerTransactionRepository = brokerTransactionRepository;
     this.stockRepository = stockRepository;
     this.realEstateService = realEstateService;
+    this.assets = assets;
   }
 
   /** Fills the schema of the current user (see TenantContext.runAs). */
@@ -60,6 +63,7 @@ public class SampleData {
     etf(today, new Random(3));
     bonds(today, new Random(5));
     realEstate();
+    otherAssetsAndDebts(today);
   }
 
   private void bankMovements(LocalDate today, Random rng) {
@@ -150,6 +154,15 @@ public class SampleData {
         LocalDate.of(2019, 6, 15), new BigDecimal("145000"), new BigDecimal("168000"),
         new BigDecimal("650"), new BigDecimal("120"), "EUR");
     realEstateService.save(flat);
+  }
+
+  /** a car valued three months ago, gold without a date (counted on every day), a car loan with payment and rate */
+  private void otherAssetsAndDebts(LocalDate today) {
+    assets.create(new Assets.OtherAssetRequest("Auto (esempio)", "VEHICLE", new BigDecimal("9500"), "EUR",
+        today.minusMonths(3).withDayOfMonth(1)), today);
+    assets.create(new Assets.OtherAssetRequest("Oro (esempio)", "GOLD", new BigDecimal("2400"), "EUR", null), today);
+    assets.create(new Assets.DebtRequest("Prestito auto (esempio)", new BigDecimal("6200"), "EUR", new BigDecimal("5.9"),
+        new BigDecimal("280"), null), today);
   }
 
   private static BankTransactionDto tx(String account, LocalDate day, int hour, String description, double amount) {

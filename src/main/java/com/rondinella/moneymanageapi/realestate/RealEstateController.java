@@ -4,9 +4,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.math.BigDecimal;
 import java.util.List;
 
+/** Real estate of the user who is logged in, one by one (the totals are in /api/assets). */
 @RestController
 @RequestMapping(path = "/api/realestate", produces = "application/json")
 public class RealEstateController {
@@ -41,10 +41,5 @@ public class RealEstateController {
   public ResponseEntity<Void> delete(@PathVariable Long id) {
     realEstateService.delete(id);
     return ResponseEntity.noContent().build();
-  }
-
-  @GetMapping("/worth")
-  public ResponseEntity<BigDecimal> totalWorth() {
-    return ResponseEntity.ok(realEstateService.totalWorth());
   }
 }
