@@ -17,6 +17,12 @@ public interface DailyBalanceRepository extends JpaRepository<DailyBalance, Dail
 
   DailyBalance findFirstByAccountOrderByDateDesc(String account);
 
+  /** every daily balance of every account, by account and oldest first (the net worth over time) */
+  List<DailyBalance> findAllByOrderByAccountAscDateAsc();
+
+  @Query("SELECT min(d.date) FROM DailyBalance d")
+  LocalDate findFirstDate();
+
   @Transactional
   @Modifying(flushAutomatically = true, clearAutomatically = true)
   @Query("DELETE FROM DailyBalance d WHERE d.account = :account")

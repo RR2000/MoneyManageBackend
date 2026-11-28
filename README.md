@@ -56,6 +56,14 @@ sees only its own data.
   `POST /api/money-accounts/{id}/movements` `{"q","kind":"ALL|IN|OUT","offset","limit"}` the movements newest first,
   searched by words of the description or by amount (the search travels in the body). `POST /api/money-accounts/delete`
   `{"name","confirm"}` deletes an account no bank imports into.
+- **Overview**: `GET /api/net-worth?from=YYYY-MM-DD` gives the net worth on `from` (left out: the first day with
+  data), at the end of every month after it and today, oldest first, each split in cash (the balance of every
+  account on its last day with a balance until then), investments (the worth of the portfolio at its last price
+  until then), real estate (the estimated value, from the purchase date on) and debts (0 for now); plus `today`,
+  `before` (30 days ago, for the change) and how many accounts, properties and instruments are in it. Only euro:
+  accounts and real estate in another currency are left out of the total, nothing is converted, and `excluded` says
+  how many and which currencies. `GET /api/money-accounts/movements/latest?limit=8` gives the newest movements of every
+  account (at most 50), each with its account and the `accountId` of its page.
 - **Real estate**: CRUD with total estimated value.
 - **Monte Carlo**: projection of the portfolio from its historical monthly returns (percentiles P5-P95).
 - **Accounts**: registration and login with a JWT, optional "Accedi con GitHub" (an account is found again only by a

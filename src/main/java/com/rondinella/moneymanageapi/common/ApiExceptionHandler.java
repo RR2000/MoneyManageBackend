@@ -3,6 +3,7 @@ package com.rondinella.moneymanageapi.common;
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.TypeMismatchException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -38,6 +39,12 @@ public class ApiExceptionHandler {
   @ExceptionHandler(DataIntegrityViolationException.class)
   ResponseEntity<Map<String, Object>> conflict() {
     return body(HttpStatus.CONFLICT, "The data clashes with what is already there");
+  }
+
+  /** a parameter that is not what the endpoint takes (e.g. a date that is not one): the caller's mistake */
+  @ExceptionHandler(TypeMismatchException.class)
+  ResponseEntity<Map<String, Object>> badParameter() {
+    return body(HttpStatus.BAD_REQUEST, "Bad parameter");
   }
 
   @ExceptionHandler(MaxUploadSizeExceededException.class)

@@ -17,6 +17,9 @@ public interface BrokerTransactionRepository extends JpaRepository<BrokerTransac
   /** The executions of an ISIN at one moment: where a row of a file is looked for before adding it. */
   List<BrokerTransaction> findByIsinAndDatetimeOrderByIdAsc(String isin, Timestamp datetime);
 
+  @Query("SELECT min(t.datetime) FROM BrokerTransaction t")
+  Timestamp findFirstDatetime();
+
   @Query("SELECT DISTINCT t.isin FROM BrokerTransaction t")
   List<String> findDistinctIsin();
 
