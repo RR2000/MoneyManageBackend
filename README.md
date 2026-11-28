@@ -128,7 +128,44 @@ sees only its own data.
   out), `amount` = median of the last 6 payments. Only euro in the totals: other currencies are in `otherCurrencies`,
   never converted. The sample data come with seven categories and their rules (four fixed, with a monthly, a
   two-monthly and a yearly cost); real accounts start with none.
-- **Monte Carlo**: projection of the portfolio from its historical monthly returns (percentiles P5-P95).
+- **Plan**: where the investments are going, in place of a spreadsheet. `GET /api/plans` lists the plans (the one saved
+  last first, each with planned against real) and the inputs from money: the value of the investments today, the money
+  put in (`invested`, the cost of what is held: the base of the taxes), the monthly payment (purchases with their fees
+  minus sales of the last 12 months, divided by 12, or by the months since the first purchase when fewer; never below
+  zero; `monthlyMonths`) and the yearly return so far (`historicalRate`: the XIRR of the investments page, in percent, for
+  reference). `POST /api/plans` `{"name","config"}` creates a plan, `PUT /api/plans/{id}` saves a new version (the ones
+  before stay: `GET /api/plans/{id}?version=n`), `DELETE /api/plans/{id}` deletes it with its versions; "duplicate as a
+  scenario" is a `POST` with the values of another. `config`: `targetDate`, `startValue`, `invested`, `monthly`, each with
+  `*Own` (true: the user's own value; false: on saving money's value of that day is taken instead), `inflation`,
+  `taxRate`, `ratePrudent`, `rateBase`, `rateOptimistic` (percent a year; empty: 2, 26, 3, 5, 7) and `events`
+  (`{"kind":"ONE_OFF|MONTHLY","date","amount","label"}`: money in (+) or out (-) once in the month of the date, or the
+  monthly payment changing by the amount from that month on). `POST /api/plans/projection` `{"config","monteCarlo"}`
+  computes without saving. The arithmetic, month by month from this month (0) to the month of the target date: the
+  payment of the month goes in, then the events of the month, then the month grows, V = V x (1 + r_m) with r_m =
+  (1 + r)^(1/12) - 1 (twelve months give exactly r; r / 12 would give more). Money in adds to the value and to the money
+  put in; money out takes from the value (never below zero) and lowers the money put in in the same proportion. At the
+  target date, for each scenario: before taxes (`gross`), the tax on the gain only, `taxRate x max(0, value - invested)`,
+  after it (`afterTax`) and after it in euro of today (`real` = afterTax / (1 + inflation)^years, with the exact years
+  from today to the target date: whole years plus the days left over the length of that year); and the values month by
+  month (`labels` yyyy-MM, `prudent`, `base`, `optimistic`, `invested` of the base one). Monte Carlo
+  (`monteCarlo: true`): 2000 paths with the same payments and events, each month growing by exp(m + s z) with z normal and
+  m, s the mean and standard deviation of the real monthly log returns of the portfolio (from the history of the
+  investments page, end of every complete month, the money put in during the month taken out); percentiles `p5`, `p50`,
+  `p95` at every month of the plan; fixed seed (the same plan gives the same band); fewer than 6 months of history:
+  `available: false`, `HISTORY_TOO_SHORT`. Planned against real: the value of the investments at the end of every month
+  from the month of the first version is kept (table `plan_snapshot`), taken on the first of the next month at 04:15
+  (Europe/Rome) or filled in from the history of the investments when missing (also on reading); a month kept is never
+  changed. `tracking` compares it with the base scenario of the version from the day it was saved (in the month of saving
+  nothing happens, then one step a month): `status` `ON_TRACK` (within 5% of the planned value), `ABOVE`, `BELOW`, with
+  `gap` (actual - planned) and `gapShare`, or `WAITING` with `nextCheck` until the first month is complete. Codes:
+  `NAME_REQUIRED`, `NAME_TOO_LONG` (60), `TARGET_DATE` (from next month to 100 years), `START_RANGE`, `INVESTED_RANGE`,
+  `MONTHLY_RANGE` (0 or more, two decimals), `RATE_RANGE` (-20 to 30), `RATE_ORDER` (prudent <= base <= optimistic),
+  `INFLATION_RANGE` (-5 to 20), `TAX_RANGE` (0 to 100), `TOO_MANY_EVENTS` (50), `EVENT_KIND`, `EVENT_DATE` (on saving: from
+  next month to the target month; the projection only leaves out the others), `EVENT_AMOUNT` (not 0, two decimals),
+  `EVENT_LABEL` (60), `TOO_MANY` (20 plans), `TOO_MANY_VERSIONS` (1000). The sample data come with a plan in two versions,
+  saved 12 and 5 months before. Only euro, as on the investments page.
+- **Monte Carlo** (old dashboard): `GET /api/montecarlo` projects the portfolio from its historical monthly returns
+  without payments (percentiles P5-P95); the plan has the one with payments and events.
 - **Accounts**: registration and login with a JWT, optional "Accedi con GitHub" (an account is found again only by a
   verified GitHub email), optional "forgot password" by email (`POST /api/auth/password/forgot`, then
   `/api/auth/password/reset` with the token of the link). The account's email is set from a confirmation link

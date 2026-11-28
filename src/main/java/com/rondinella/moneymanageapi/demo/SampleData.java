@@ -6,6 +6,7 @@ import com.rondinella.moneymanageapi.banktransactions.BankTransactionService;
 import com.rondinella.moneymanageapi.brokertransactions.BrokerTransaction;
 import com.rondinella.moneymanageapi.brokertransactions.BrokerTransactionRepository;
 import com.rondinella.moneymanageapi.categories.Categories;
+import com.rondinella.moneymanageapi.plan.Plans;
 import com.rondinella.moneymanageapi.realestate.RealEstateDto;
 import com.rondinella.moneymanageapi.realestate.RealEstateService;
 import com.rondinella.moneymanageapi.stocks.Stock;
@@ -47,16 +48,18 @@ public class SampleData {
   private final RealEstateService realEstateService;
   private final Assets assets;
   private final Categories categories;
+  private final Plans plans;
 
   public SampleData(BankTransactionService bankTransactionService, BrokerTransactionRepository brokerTransactionRepository,
                     StockRepository stockRepository, RealEstateService realEstateService, Assets assets,
-                    Categories categories) {
+                    Categories categories, Plans plans) {
     this.bankTransactionService = bankTransactionService;
     this.brokerTransactionRepository = brokerTransactionRepository;
     this.stockRepository = stockRepository;
     this.realEstateService = realEstateService;
     this.assets = assets;
     this.categories = categories;
+    this.plans = plans;
   }
 
   /** Fills the schema of the current user (see TenantContext.runAs). */
@@ -69,6 +72,7 @@ public class SampleData {
     // own seed: the price path does not depend on how many bank movements came before (a calm, rising one)
     etf(today, new Random(3));
     bonds(today, new Random(5));
+    plans.sample(today);
     realEstate();
     otherAssetsAndDebts(today);
   }
