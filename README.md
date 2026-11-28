@@ -182,6 +182,15 @@ sees only its own data.
   and `oidcLogoutUrl` (the provider's `end_session_endpoint` with `client_id` and `post_logout_redirect_uri`
   `<MONEY_WEB_URL>/`; the web app adds `id_token_hint`). The provider is read from its discovery document after the
   start, never before: if it is down the site starts and the other logins work.
+- **Link to raoulrondinella.dev** (settings page): an account logged in with its password or GitHub is linked to a
+  person of the provider whatever the two emails are. `POST /api/account/oidc-link` answers `{"url"}` (the provider's
+  button with `?link=<request>`): the request is signed with a key of its own (never a login token), valid 2 minutes
+  and once, bound to the browser by a `__Host-money-oidc-link` cookie. The authorization request (state, PKCE, nonce)
+  then stands for that account for 10 minutes and once; back from the provider the `sub` is saved on it, never by
+  email: refused if another account has it (`already-linked`) or if the account has another one (`other-subject`).
+  Back at `/settings#oidc-link=linked&id_token=...` or `/settings#oidc-link-error=<code>` (also `expired`,
+  `unavailable`, `failed`). `DELETE /api/account/oidc-link` unlinks (409 `only-login` with `AUTH_MODE=oidc`).
+  `GET /api/account` says `oidc`, `oidcLinked`, `oidcCanUnlink`; with the provider off both endpoints answer 404.
 
 API docs: `/swagger-ui.html` on the backend, when `MONEY_API_DOCS=true` (on in the local run).
 
