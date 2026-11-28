@@ -103,7 +103,13 @@ public class AuthService {
     user.setEmail(email);
     user.setIdpSubject(idpSubject);
     user = userRepository.save(user);
-    tenantSchemas.migrate(TenantContext.schemaOf(user.getId()));
+    try {
+      tenantSchemas.migrate(TenantContext.schemaOf(user.getId()));
+    } catch (RuntimeException e) {
+      // no account without its schema: the registration fails as a whole and can be tried again
+      userRepository.delete(user);
+      throw e;
+    }
     return user;
   }
 
