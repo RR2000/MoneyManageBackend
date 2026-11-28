@@ -53,12 +53,9 @@ public class Categories {
   /**
    * What "apply to all" does (or would do): movements that get a category ({@code categorized}), that get another one
    * ({@code changed}), that lose the one a rule had given ({@code cleared}, no rule matches any more), and the ones
-   * chosen by hand, which stay as they are ({@code manualKept}).
+   * chosen by hand, which stay as they are ({@code manualKept}); {@code total}: the three changes together.
    */
-  public record Applied(boolean dryRun, int categorized, int changed, int cleared, long manualKept) {
-    public int total() {
-      return categorized + changed + cleared;
-    }
+  public record Applied(boolean dryRun, int categorized, int changed, int cleared, int total, long manualKept) {
   }
 
   /** the rule to create from a movement: its text (the description, or a part of it), direction, only its account */
@@ -205,7 +202,7 @@ public class Categories {
     }
     long manual = em.createQuery("SELECT count(t) FROM BankTransaction t WHERE t.categorySource = :manual", Long.class)
         .setParameter("manual", BankTransaction.CategorySource.MANUAL).getSingleResult();
-    return new Applied(dryRun, categorized, changed, cleared, manual);
+    return new Applied(dryRun, categorized, changed, cleared, categorized + changed + cleared, manual);
   }
 
   /**

@@ -290,6 +290,7 @@ class CategoriesTests {
     assertEquals("caffe", assigned.get("rule").get("pattern").asString());
     assertEquals(id, assigned.get("rule").get("accountId").asString());
     assertEquals(1, assigned.get("preview").get("categorized").asInt(), "CAFFE CENTRALE, uploaded before the rule");
+    assertEquals(1, assigned.get("preview").get("total").asInt());
     assertEquals(1, assigned.get("preview").get("manualKept").asLong());
 
     // a movement given by hand keeps its category, whatever the rules say
