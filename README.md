@@ -6,9 +6,9 @@ projection.
 This is the REST API (Spring Boot); the web app is in
 [money-manage-app](https://github.com/RR2000/money-manage-app).
 
-Demo: https://money.raoulrondinella.dev - register with any username; tick "sample data" to start with a
-made-up year of movements and two made-up funds, or leave it empty and upload your own files (or "Accedi con GitHub"). Every account
-sees only its own data.
+Demo: https://money.raoulrondinella.dev/demo - one click, no password and no sign-up: a sandbox of your own with a
+made-up year of movements, two made-up funds, assets and a plan, gone after 24 hours. Or register with any username
+and tick "sample data", or leave it empty and upload your own files. Every account sees only its own data.
 
 ## What it does
 
@@ -192,6 +192,23 @@ sees only its own data.
   `unavailable`, `failed`). `DELETE /api/account/oidc-link` unlinks (409 `only-login` with `AUTH_MODE=oidc`).
   `GET /api/account` says `oidc`, `oidcLinked`, `oidcCanUnlink`; with the provider off both endpoints answer 404.
 
+- **Demo sandboxes** ("Try the demo", `MONEY_DEMO_ENABLED=true`; off by default, then `POST /api/demo` answers 404):
+  `POST /api/demo`, without a login, makes an account `demo-<10 random characters>` with no email and no password
+  anybody knows, the `demo` flag and `expires_at` 24 hours later (`MONEY_DEMO_HOURS`), its own schema with the sample
+  data, and answers `{"token"}` like a login (201). `GET /api/auth/providers` says `demo`; `GET /api/account` says
+  `demo` and, for a sandbox, `expiresAt` and `demoHours`. Limits: `MONEY_DEMO_PER_IP` new sandboxes an hour per client
+  address (3, `X-Real-IP` from swag) and `MONEY_DEMO_MAX_ACTIVE` open at the same time (50), then 429 with the code
+  `DEMO_LIMIT_IP` or `DEMO_FULL` in `code` and `message`. A sandbox can write anything inside its schema (movements,
+  categories, plans, assets...), but what goes outside is refused before the endpoint, with a code: 403
+  `DEMO_NO_BANKING` (every `/api/banking`), `DEMO_NO_EMAIL` (`POST /api/account/email`), `DEMO_NO_SSO`
+  (`/api/account/oidc-link`), `DEMO_NO_PRICES` (symbol preview and choice: Alpha Vantage), and 413
+  `DEMO_UPLOAD_TOO_LARGE` with `limitKb` for a bank, broker or prices file over `MONEY_DEMO_MAX_UPLOAD_KB` (256).
+  The market is never asked for the prices of a sandbox (the sample funds have their own, a file may bring more), so
+  the free quota of Alpha Vantage is not spent by visitors. Past `expires_at` its token stops working; every hour
+  (minute 7) a job removes the sandboxes past their end with their schema (email links and bank states go with the
+  row): the delete itself requires `demo` and the `demo-` prefix, the database refuses a demo row without them, and
+  nobody can register a `demo-` username, so no other account can ever be removed by it.
+
 API docs: `/swagger-ui.html` on the backend, when `MONEY_API_DOCS=true` (on in the local run).
 
 ## Stack
@@ -227,6 +244,11 @@ The database user must be able to create schemas in its database (one schema per
 | `MONEY_ENABLEBANKING_KEY` | empty (off) | the application's private key: its PEM file in base64 on one line (`base64 -w0 key.pem`) |
 | `MONEY_BANKING_USERS` | empty (off) | ids of the users who may use open banking, comma separated (the others get 404) |
 | `MONEY_CORS_ORIGINS` | empty (closed) | only for a web app on another origin |
+| `MONEY_DEMO_ENABLED` | `false` | `true`: "Try the demo", `POST /api/demo` makes a sandbox with the sample data |
+| `MONEY_DEMO_PER_IP` | `3` | new sandboxes an hour from one client address |
+| `MONEY_DEMO_MAX_ACTIVE` | `50` | sandboxes open at the same time, for the whole site |
+| `MONEY_DEMO_HOURS` | `24` | how long a sandbox lasts |
+| `MONEY_DEMO_MAX_UPLOAD_KB` | `256` | largest file a sandbox uploads |
 | `MONEY_API_DOCS` | `false` | `true`: OpenAPI description and Swagger UI on `/v3/api-docs` and `/swagger-ui.html` |
 
 ## Security
@@ -251,6 +273,9 @@ The database user must be able to create schemas in its database (one schema per
   nothing is sent, same answer). An email becomes the account's only once confirmed from a link (24 hours), so
   nobody can attach an address they do not own. Tokens travel in the body and, in the links, in the
   URL fragment: never in an access log. Emails and tokens are never logged.
+- Demo sandboxes: see above. Created one at a time (the cap cannot be passed by two requests together), never with
+  an email or a usable password; the limit per address is in memory (a restart forgets it), the cap is counted in
+  the database. Nothing they do leaves the server: no bank, no mail, no single sign-on, no market.
 - Uploads up to 10 MB; amounts never travel in a URL (they would end up in the access logs).
 - Open banking: off unless all three variables and `MONEY_WEB_URL` are set, and only for the listed users (404 for
   the others). The callback has no login: it is tied to a `state` of 32 random bytes, kept only as a SHA-256, valid

@@ -3,6 +3,8 @@ package com.rondinella.moneymanageapi.common.configurations;
 import com.rondinella.moneymanageapi.auth.AuthService;
 import com.rondinella.moneymanageapi.auth.github.GitHubLogin;
 import com.rondinella.moneymanageapi.auth.github.GitHubUserService;
+import com.rondinella.moneymanageapi.demo.DemoGuard;
+import com.rondinella.moneymanageapi.demo.DemoSettings;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import com.rondinella.moneymanageapi.auth.oidc.OidcAccounts;
@@ -50,7 +52,8 @@ public class SecurityConfig {
                                                  OidcLogin oidc,
                                                  OidcAccounts oidcAccounts,
                                                  OidcLinks oidcLinks,
-                                                 AuthService authService) throws Exception {
+                                                 AuthService authService,
+                                                 DemoSettings demo) throws Exception {
     http
         .cors(cors -> cors.configurationSource(corsConfigurationSource))
         // Stateless token API: CSRF tokens are not applicable to the JSON
@@ -59,6 +62,8 @@ public class SecurityConfig {
         .csrf(csrf -> csrf.ignoringRequestMatchers("/api/**"))
         .authorizeHttpRequests(auth -> auth
             .requestMatchers("/api/auth/**").permitAll()
+            // "Prova la demo": a sandbox without a login (404 while the demo is off)
+            .requestMatchers(HttpMethod.POST, "/api/demo").permitAll()
             // the bank sends the browser back without a login: the one-time state says whose it is
             .requestMatchers(HttpMethod.GET, "/api/banking/callback").permitAll()
             .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
@@ -69,7 +74,9 @@ public class SecurityConfig {
         // no token or an expired one: 401, the web app goes back to the login page
         .exceptionHandling(e -> e.authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED)))
         .authenticationProvider(authenticationProvider)
-        .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+        .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
+        // after the token: what a demo sandbox cannot do (bank, mail, sign-on, market prices, big files)
+        .addFilterAfter(new DemoGuard(demo), UsernamePasswordAuthenticationFilter.class);
     // GitHub (not with AUTH_MODE=oidc) and the site's OpenID provider (AUTH_MODE both or oidc, OidcLogin) send the
     // browser back to the backend, which gives the web app its token in the URL fragment (never sent to a server, so
     // it does not end up in access logs); for the OpenID provider also the id token, for its logout

@@ -27,7 +27,7 @@ import java.util.Random;
 /**
  * Made-up data for a new account, so the dashboard has something to show: a year of movements on two bank
  * accounts, a fake ETF bought every month (a few sold four months ago) and a fake bond ETF bought every three months
- * (with their own fake price history, no market data calls), a flat, a car, some gold and a car loan; categories
+ * (with their own fake price history up to today, no market data calls), a flat, a car, some gold and a car loan; categories
  * with their rules (rent, bills, subscriptions and the car insurance are fixed costs; some small expenses stay without
  * a category). Every name says "esempio": nothing here is real.
  */
@@ -147,6 +147,7 @@ public class SampleData {
         trades.add(trade(ETF_ISIN, "ETF Mondo (esempio)", month.plusDays(10), BigDecimal.valueOf(-6), close));
       }
     }
+    today(prices, ETF_SYMBOL, ETF_ISIN, today);
     save(prices, trades, today);
   }
 
@@ -163,7 +164,19 @@ public class SampleData {
         trades.add(trade(BOND_ISIN, "Obbligazioni Euro (esempio)", month, BigDecimal.TEN, close));
       }
     }
+    today(prices, BOND_SYMBOL, BOND_ISIN, today);
     save(prices, trades, today);
+  }
+
+  /**
+   * The last price again today (after the first of the month): the made-up funds never look like prices that stopped
+   * (the overview flags a price older than ten days), the demo sandboxes never ask the market for newer ones.
+   */
+  private static void today(List<Stock> prices, String symbol, String isin, LocalDate today) {
+    Stock last = prices.getLast();
+    if (last.getDatetime().toLocalDateTime().toLocalDate().isBefore(today)) {
+      prices.add(price(symbol, isin, today, last.getClose()));
+    }
   }
 
   private static Stock price(String symbol, String isin, LocalDate month, BigDecimal close) {

@@ -27,6 +27,33 @@ public class User {
   @Column(name = "idp_subject", unique = true)
   private String idpSubject;
 
+  /**
+   * A demo sandbox ("Prova la demo", see DemoAccounts): username demo-..., no email, no usable password, removed with
+   * its schema after {@link #expiresAt}. Never true for an account somebody registered.
+   */
+  @Column(nullable = false)
+  private boolean demo;
+
+  /** only for a demo sandbox: when it stops working and is removed; null for every other account */
+  @Column(name = "expires_at")
+  private java.time.Instant expiresAt;
+
+  public boolean isDemo() {
+    return demo;
+  }
+
+  public void setDemo(boolean demo) {
+    this.demo = demo;
+  }
+
+  public java.time.Instant getExpiresAt() {
+    return expiresAt;
+  }
+
+  public void setExpiresAt(java.time.Instant expiresAt) {
+    this.expiresAt = expiresAt;
+  }
+
   public String getIdpSubject() {
     return idpSubject;
   }

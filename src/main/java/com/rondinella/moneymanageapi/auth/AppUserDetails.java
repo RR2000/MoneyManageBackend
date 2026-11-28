@@ -9,10 +9,17 @@ import java.util.List;
 public class AppUserDetails extends org.springframework.security.core.userdetails.User {
 
   private final String schema;
+  /** a demo sandbox: what reaches outside (bank, mail, sign-on, market prices) is refused (DemoGuard) */
+  private final boolean demo;
 
   public AppUserDetails(User user) {
     super(user.getUsername(), user.getPassword(), List.of(new SimpleGrantedAuthority("ROLE_" + user.getRole())));
     this.schema = TenantContext.schemaOf(user.getId());
+    this.demo = user.isDemo();
+  }
+
+  public boolean isDemo() {
+    return demo;
   }
 
   public String getSchema() {
