@@ -1,5 +1,10 @@
 package com.rondinella.moneymanageapi.networth;
 
+import com.rondinella.moneymanageapi.assets.Assets;
+import com.rondinella.moneymanageapi.assets.Debt;
+import com.rondinella.moneymanageapi.assets.DebtRepository;
+import com.rondinella.moneymanageapi.assets.OtherAsset;
+import com.rondinella.moneymanageapi.assets.OtherAssetRepository;
 import com.rondinella.moneymanageapi.banktransactions.BankTransactionRepository;
 import com.rondinella.moneymanageapi.banktransactions.DailyBalance;
 import com.rondinella.moneymanageapi.banktransactions.DailyBalanceRepository;
@@ -29,8 +34,10 @@ import java.util.stream.Stream;
 
 /**
  * The net worth of the user over time: cash (the balances of the accounts), investments (the worth of the portfolio),
- * real estate and debts, at the end of every month and today. Only euro: accounts and real estate in another
- * currency are left out of the total and counted apart (nothing is converted).
+ * real estate, other assets and debts, at the end of every month and today. Only euro: accounts, real estate, other
+ * assets and debts in another currency are left out of the total and counted apart (nothing is converted).
+ * Real estate counts from its purchase date on, another asset from the day of its estimate on (on every day without
+ * one), a debt with what is left today on every day: its past is not rebuilt (see {@link Assets}).
  */
 @Service
 public class NetWorth {
@@ -41,21 +48,26 @@ public class NetWorth {
   /** days of the change shown next to today's net worth */
   static final int CHANGE_DAYS = 30;
 
-  /** The parts of the net worth on one day; debts are negative (0 until they are tracked). */
-  public record Point(LocalDate date, BigDecimal cash, BigDecimal investments, BigDecimal realEstate, BigDecimal debts,
-                      BigDecimal total) {
+  /** The parts of the net worth on one day; debts are negative. */
+  public record Point(LocalDate date, BigDecimal cash, BigDecimal investments, BigDecimal realEstate,
+                      BigDecimal otherAssets, BigDecimal debts, BigDecimal total) {
   }
 
-  /** What is not in the total because it is not in euro: how many accounts and properties, and their currencies. */
-  public record Excluded(int accounts, int realEstates, List<String> currencies) {
+  /** What is not in the total because it is not in euro: how many of each, and their currencies. */
+  public record Excluded(int accounts, int realEstates, int otherAssets, int debts, List<String> currencies) {
   }
 
   /**
    * {@code points}: from {@code from}, the end of every month, and today (oldest first); {@code today} and
-   * {@code before} (30 days ago) for the change; {@code accounts} and {@code realEstates}: how many are in the total.
+   * {@code before} (30 days ago) for the change; {@code accounts}, {@code realEstates}, {@code otherAssets},
+   * {@code debts}: how many are in the total.
    */
   public record Answer(String currency, LocalDate from, Point today, Point before, List<Point> points, int accounts,
-                       int realEstates, int instruments, Excluded excluded) {
+                       int realEstates, int otherAssets, int debts, int instruments, Excluded excluded) {
+  }
+
+  /** what is in the total besides accounts and investments */
+  private record Owned(List<RealEstate> estates, List<OtherAsset> others, List<Debt> debts) {
   }
 
   private final DailyBalanceRepository dailyBalances;
@@ -63,15 +75,19 @@ public class NetWorth {
   private final BrokerTransactionRepository brokerTransactions;
   private final BrokerTransactionService broker;
   private final RealEstateRepository realEstates;
+  private final OtherAssetRepository otherAssets;
+  private final DebtRepository debts;
 
   public NetWorth(DailyBalanceRepository dailyBalances, BankTransactionRepository transactions,
                   BrokerTransactionRepository brokerTransactions, BrokerTransactionService broker,
-                  RealEstateRepository realEstates) {
+                  RealEstateRepository realEstates, OtherAssetRepository otherAssets, DebtRepository debts) {
     this.dailyBalances = dailyBalances;
     this.transactions = transactions;
     this.brokerTransactions = brokerTransactions;
     this.broker = broker;
     this.realEstates = realEstates;
+    this.otherAssets = otherAssets;
+    this.debts = debts;
   }
 
   /** From {@code from} (null: the first day with data) to {@code today}. */
@@ -106,15 +122,39 @@ public class NetWorth {
     List<RealEstate> estates = new ArrayList<>();
     int excludedEstates = 0;
     for (RealEstate estate : realEstates.findAll()) {
-      if (estate.getCurrency() == null || estate.getCurrency().isBlank() || CURRENCY.equalsIgnoreCase(estate.getCurrency())) {
+      String currency = Assets.currencyOf(estate.getCurrency());
+      if (CURRENCY.equals(currency)) {
         estates.add(estate);
       } else {
         excludedEstates++;
-        otherCurrencies.add(estate.getCurrency().toUpperCase());
+        otherCurrencies.add(currency);
       }
     }
+    List<OtherAsset> others = new ArrayList<>();
+    int excludedOthers = 0;
+    for (OtherAsset asset : otherAssets.findAll()) {
+      String currency = Assets.currencyOf(asset.getCurrency());
+      if (CURRENCY.equals(currency)) {
+        others.add(asset);
+      } else {
+        excludedOthers++;
+        otherCurrencies.add(currency);
+      }
+    }
+    List<Debt> owed = new ArrayList<>();
+    int excludedDebts = 0;
+    for (Debt debt : debts.findAll()) {
+      String currency = Assets.currencyOf(debt.getCurrency());
+      if (CURRENCY.equals(currency)) {
+        owed.add(debt);
+      } else {
+        excludedDebts++;
+        otherCurrencies.add(currency);
+      }
+    }
+    Owned owned = new Owned(estates, others, owed);
 
-    LocalDate start = from != null ? from : firstDay(estates, today);
+    LocalDate start = from != null ? from : firstDay(owned, today);
     if (start.isAfter(today)) {
       start = today;
     }
@@ -128,10 +168,11 @@ public class NetWorth {
 
     List<Point> points = new ArrayList<>();
     for (LocalDate day : days(start, today)) {
-      points.add(point(day, cash, worth, estates));
+      points.add(point(day, cash, worth, owned));
     }
-    return new Answer(CURRENCY, start, points.getLast(), point(before, cash, worth, estates), points, accounts,
-        estates.size(), instruments, new Excluded(excludedAccounts, excludedEstates, List.copyOf(otherCurrencies)));
+    return new Answer(CURRENCY, start, points.getLast(), point(before, cash, worth, owned), points, accounts,
+        estates.size(), others.size(), owed.size(), instruments,
+        new Excluded(excludedAccounts, excludedEstates, excludedOthers, excludedDebts, List.copyOf(otherCurrencies)));
   }
 
   /** {@code from}, the last day of every month after it and before today, and today */
@@ -151,7 +192,7 @@ public class NetWorth {
   }
 
   private static Point point(LocalDate day, List<NavigableMap<LocalDate, BigDecimal>> cash,
-                             NavigableMap<LocalDate, BigDecimal> worth, List<RealEstate> estates) {
+                             NavigableMap<LocalDate, BigDecimal> worth, Owned owned) {
     BigDecimal money = BigDecimal.ZERO;
     for (NavigableMap<LocalDate, BigDecimal> account : cash) {
       Map.Entry<LocalDate, BigDecimal> last = account.floorEntry(day);
@@ -162,14 +203,24 @@ public class NetWorth {
     Map.Entry<LocalDate, BigDecimal> invested = worth.floorEntry(day);
     BigDecimal investments = invested == null ? BigDecimal.ZERO : invested.getValue();
     BigDecimal property = BigDecimal.ZERO;
-    for (RealEstate estate : estates) {
-      if (estate.getCurrentEstimatedValue() != null
-          && (estate.getPurchaseDate() == null || !estate.getPurchaseDate().isAfter(day))) {
+    for (RealEstate estate : owned.estates()) {
+      if (Assets.counts(estate, day)) {
         property = property.add(estate.getCurrentEstimatedValue());
       }
     }
+    BigDecimal things = BigDecimal.ZERO;
+    for (OtherAsset asset : owned.others()) {
+      if (Assets.counts(asset, day)) {
+        things = things.add(asset.getEstimatedValue());
+      }
+    }
+    // what is left today, also on the days before: the past of a debt is not known
     BigDecimal debts = BigDecimal.ZERO;
-    return new Point(day, money, investments, property, debts, money.add(investments).add(property).add(debts));
+    for (Debt debt : owned.debts()) {
+      debts = debts.subtract(debt.getBalance());
+    }
+    return new Point(day, money, investments, property, things, debts,
+        money.add(investments).add(property).add(things).add(debts));
   }
 
   /**
@@ -195,8 +246,8 @@ public class NetWorth {
     return worth;
   }
 
-  /** the first day with a balance, an investment or a property; today when there is nothing */
-  private LocalDate firstDay(List<RealEstate> estates, LocalDate today) {
+  /** the first day with a balance, an investment, a property or an estimate of another asset; today when there is nothing */
+  private LocalDate firstDay(Owned owned, LocalDate today) {
     LocalDate first = today;
     LocalDate balance = dailyBalances.findFirstDate();
     if (balance != null && balance.isBefore(first)) {
@@ -206,9 +257,14 @@ public class NetWorth {
     if (bought != null && bought.toLocalDateTime().toLocalDate().isBefore(first)) {
       first = bought.toLocalDateTime().toLocalDate();
     }
-    for (RealEstate estate : estates) {
+    for (RealEstate estate : owned.estates()) {
       if (estate.getPurchaseDate() != null && estate.getPurchaseDate().isBefore(first)) {
         first = estate.getPurchaseDate();
+      }
+    }
+    for (OtherAsset asset : owned.others()) {
+      if (asset.getValuedOn() != null && asset.getValuedOn().isBefore(first)) {
+        first = asset.getValuedOn();
       }
     }
     return first.isBefore(today.minusYears(Utils.MAX_YEARS)) ? today.minusYears(Utils.MAX_YEARS) : first;

@@ -120,9 +120,9 @@ class MoneyManageApiTests {
     mvc.perform(get("/api/realestate").header("Authorization", auth))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$", hasSize(1)));
-    mvc.perform(get("/api/realestate/worth").header("Authorization", auth))
+    mvc.perform(get("/api/assets").header("Authorization", auth))
         .andExpect(status().isOk())
-        .andExpect(content().string("168000.00"));
+        .andExpect(jsonPath("$.totals[0].realEstate").value(168000.0));
   }
 
   @Test

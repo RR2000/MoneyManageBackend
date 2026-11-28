@@ -7,6 +7,7 @@ import org.springframework.beans.TypeMismatchException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.web.ErrorResponse;
@@ -45,6 +46,12 @@ public class ApiExceptionHandler {
   @ExceptionHandler(TypeMismatchException.class)
   ResponseEntity<Map<String, Object>> badParameter() {
     return body(HttpStatus.BAD_REQUEST, "Bad parameter");
+  }
+
+  /** a body that is not the JSON the endpoint takes (e.g. a date that is not one): the caller's mistake, no details */
+  @ExceptionHandler(HttpMessageNotReadableException.class)
+  ResponseEntity<Map<String, Object>> badBody() {
+    return body(HttpStatus.BAD_REQUEST, "Bad request body");
   }
 
   @ExceptionHandler(MaxUploadSizeExceededException.class)

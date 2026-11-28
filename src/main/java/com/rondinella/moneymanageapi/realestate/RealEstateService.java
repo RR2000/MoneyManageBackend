@@ -1,13 +1,23 @@
 package com.rondinella.moneymanageapi.realestate;
 
+import com.rondinella.moneymanageapi.assets.Checks;
+import com.rondinella.moneymanageapi.banktransactions.AccountPages;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
-import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.NoSuchElementException;
 
+/**
+ * Real estate of the user. What is saved follows the rules of the assets page ({@link Checks}): a name, the
+ * estimated value, amounts of 0 or more, an ISO currency; address, purchase date and price, rent and expenses optional.
+ */
 @Service
 public class RealEstateService {
+
+  /** per user */
+  static final int MAX_ITEMS = 500;
 
   private final RealEstateRepository realEstateRepository;
 
@@ -24,12 +34,17 @@ public class RealEstateService {
         .orElseThrow(() -> new NoSuchElementException("RealEstate not found: " + id));
   }
 
+  @Transactional
   public RealEstate save(RealEstateDto dto) {
+    if (realEstateRepository.count() >= MAX_ITEMS) {
+      throw Checks.bad("TOO_MANY");
+    }
     RealEstate entity = toEntity(dto);
     entity.setId(null);
     return realEstateRepository.save(entity);
   }
 
+  @Transactional
   public RealEstate update(Long id, RealEstateDto dto) {
     if (!realEstateRepository.existsById(id)) {
       throw new NoSuchElementException("RealEstate not found: " + id);
@@ -39,27 +54,26 @@ public class RealEstateService {
     return realEstateRepository.save(entity);
   }
 
+  @Transactional
   public void delete(Long id) {
-    realEstateRepository.deleteById(id);
+    realEstateRepository.delete(findById(id));
   }
 
-  public BigDecimal totalWorth() {
-    return realEstateRepository.findAll().stream()
-        .map(r -> r.getCurrentEstimatedValue() != null ? r.getCurrentEstimatedValue() : BigDecimal.ZERO)
-        .reduce(BigDecimal.ZERO, BigDecimal::add);
-  }
-
-  private RealEstate toEntity(RealEstateDto dto) {
+  private static RealEstate toEntity(RealEstateDto dto) {
+    if (dto == null) {
+      throw Checks.bad("NAME_REQUIRED");
+    }
+    LocalDate today = LocalDate.now(AccountPages.ZONE);
     return new RealEstate(
         dto.getId(),
-        dto.getName(),
-        dto.getAddress(),
-        dto.getPurchaseDate(),
-        dto.getPurchasePrice(),
-        dto.getCurrentEstimatedValue(),
-        dto.getMonthlyRent(),
-        dto.getMonthlyExpenses(),
-        dto.getCurrency()
+        Checks.name(dto.getName()),
+        Checks.text(dto.getAddress()),
+        Checks.date(dto.getPurchaseDate(), today),
+        Checks.optionalAmount(dto.getPurchasePrice()),
+        Checks.amount(dto.getCurrentEstimatedValue()),
+        Checks.optionalAmount(dto.getMonthlyRent()),
+        Checks.optionalAmount(dto.getMonthlyExpenses()),
+        Checks.currency(dto.getCurrency())
     );
   }
 }

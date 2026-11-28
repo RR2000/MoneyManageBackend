@@ -1,7 +1,7 @@
 # Money Manage - backend
 
 Personal finance dashboard: bank and broker movements imported from the banks' export files, balances over
-time, a portfolio graph, real estate, and a Monte Carlo projection of the portfolio.
+time, a portfolio graph, real estate, other assets and debts, and a Monte Carlo projection of the portfolio.
 This is the REST API (Spring Boot); the web app is in
 [money-manage-app](https://github.com/RR2000/money-manage-app).
 
@@ -59,10 +59,12 @@ sees only its own data.
 - **Overview**: `GET /api/net-worth?from=YYYY-MM-DD` gives the net worth on `from` (left out: the first day with
   data), at the end of every month after it and today, oldest first, each split in cash (the balance of every
   account on its last day with a balance until then), investments (the worth of the portfolio at its last price
-  until then), real estate (the estimated value, from the purchase date on) and debts (0 for now); plus `today`,
-  `before` (30 days ago, for the change) and how many accounts, properties and instruments are in it. Only euro:
-  accounts and real estate in another currency are left out of the total, nothing is converted, and `excluded` says
-  how many and which currencies. `GET /api/money-accounts/movements/latest?limit=8` gives the newest movements of every
+  until then), real estate (the estimated value, from the purchase date on), other assets (the estimated value,
+  from the day of the estimate on, or on every day when it has none) and debts (negative: what is left today, also on
+  the days before, because the past of a debt is not rebuilt: a loan paid every month made the net worth of the past
+  look a little better than it was); plus `today`, `before` (30 days ago, for the change) and how many accounts,
+  properties, other assets, debts and instruments are in it. Only euro: anything in another currency is left out of
+  the total, nothing is converted, and `excluded` says how many of each and which currencies. `GET /api/money-accounts/movements/latest?limit=8` gives the newest movements of every
   account (at most 50), each with its account and the `accountId` of its page.
 - **Investments**: `GET /api/investments` gives every position (ISIN) with name, quantity, average cost (weighted
   average cost: a purchase adds quantity times price plus its fee, a sale takes out the average cost of what it sold
@@ -80,7 +82,24 @@ sees only its own data.
   read and replace the targets: an ISIN of the user at most once, 0 to 100 with at most two decimals (0: none),
   together at most 100 (the rest is "not assigned"); otherwise 400 `TARGET_RANGE`, `TARGET_SUM`, `UNKNOWN_ISIN`,
   `DUPLICATE_ISIN`.
-- **Real estate**: CRUD with total estimated value.
+- **Assets**: `GET /api/assets` gives the real estate, the other assets and the debts (largest first) and their
+  totals today by currency (`totals`: euro first and always there, then the others; real estate, other assets, debts
+  as a negative amount, and `net` = the three together; currencies are never added up or converted). Real estate counts
+  from its purchase date on, as in the net worth. Every debt says how it ends (`payoff`): `END_DATE` (the date given),
+  `ESTIMATE` (no date: from the monthly payment P and the yearly rate, n = ceil(-ln(1 - r B / P) / ln(1 + r)) months
+  with r the monthly rate and B what is left, B / P without interest), `NEVER` (the payment does not cover the
+  interest, or more than 100 years), `UNKNOWN` (no date, no payment), `PAID` (nothing left), with `expectedEnd` and
+  `monthsLeft` (rounded up, negative when the end date has passed). Other assets: `POST /api/assets/others`,
+  `PUT|DELETE /api/assets/others/{id}` with `{"name","kind","value","currency","valuedOn"}` (`kind`: `VEHICLE`, `GOLD`,
+  `CASH` for money in another currency, `RECEIVABLE` for money lent, `OTHER`; `valuedOn`: the day of the estimate,
+  optional, not in the future). Debts: `POST /api/assets/debts`, `PUT|DELETE /api/assets/debts/{id}` with
+  `{"name","balance","currency","annualRate","monthlyPayment","endDate"}` (rate in percent, payment and end date
+  optional). Real estate: `GET|POST /api/realestate`, `GET|PUT|DELETE /api/realestate/{id}` with name, address, purchase
+  date and price, estimated value, monthly rent and expenses, currency. What is refused is a 400 with a code:
+  `NAME_REQUIRED`, `NAME_TOO_LONG` (200), `TEXT_TOO_LONG` (300), `AMOUNT_REQUIRED`, `AMOUNT_RANGE` (amounts 0 or more,
+  at most two decimals and a thousand billion), `CURRENCY` (an ISO 4217 code), `KIND`, `RATE_RANGE` (0 to 100, three
+  decimals), `DATE_IN_FUTURE`, `DATE_RANGE` (1900 to 100 years ahead), `TOO_MANY` (500 of a type); an id that is not
+  there is a 404.
 - **Monte Carlo**: projection of the portfolio from its historical monthly returns (percentiles P5-P95).
 - **Accounts**: registration and login with a JWT, optional "Accedi con GitHub" (an account is found again only by a
   verified GitHub email), optional "forgot password" by email (`POST /api/auth/password/forgot`, then
