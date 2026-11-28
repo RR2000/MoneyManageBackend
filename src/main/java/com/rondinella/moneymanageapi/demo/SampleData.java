@@ -23,7 +23,8 @@ import java.util.Random;
 
 /**
  * Made-up data for a new account, so the dashboard has something to show: a year of movements on two bank
- * accounts, a fake ETF bought every month (with its own fake price history, no market data calls) and a flat.
+ * accounts, a fake ETF bought every month (a few sold four months ago) and a fake bond ETF bought every three months
+ * (with their own fake price history, no market data calls) and a flat.
  * Every name says "esempio": nothing here is real.
  */
 @Service
@@ -32,7 +33,9 @@ public class SampleData {
   public static final String CHECKING = "Conto_corrente";
   public static final String SAVINGS = "Risparmi";
   public static final String ETF_ISIN = "XX0000000001";
+  public static final String BOND_ISIN = "XX0000000002";
   private static final String ETF_SYMBOL = "DEMO-ETF";
+  private static final String BOND_SYMBOL = "DEMO-BOND";
   private static final String[] SMALL_EXPENSES = {"Ristorante", "Benzina", "Farmacia", "Libri", "Cinema", "Bar"};
 
   private final BankTransactionService bankTransactionService;
@@ -55,6 +58,7 @@ public class SampleData {
     bankMovements(today, rng);
     // own seed: the price path does not depend on how many bank movements came before (a calm, rising one)
     etf(today, new Random(3));
+    bonds(today, new Random(5));
     realEstate();
   }
 
@@ -84,29 +88,61 @@ public class SampleData {
 
   private void etf(LocalDate today, Random rng) {
     List<Stock> prices = new ArrayList<>();
-    List<BrokerTransaction> buys = new ArrayList<>();
+    List<BrokerTransaction> trades = new ArrayList<>();
     double price = 80;
+    LocalDate sale = today.minusMonths(4).withDayOfMonth(1);
     for (LocalDate month = today.minusYears(3).withDayOfMonth(1); !month.isAfter(today); month = month.plusMonths(1)) {
       price = price * Math.exp(0.006 + 0.04 * rng.nextGaussian());
       BigDecimal close = money(price);
-      Timestamp at = Timestamp.valueOf(month.atStartOfDay());
-      prices.add(new Stock(ETF_SYMBOL, ETF_ISIN, at, close, close, close, close, Currency.getInstance("EUR"), 0L));
-
-      BrokerTransaction buy = new BrokerTransaction();
-      buy.setDatetime(Timestamp.valueOf(month.withDayOfMonth(Math.min(3, month.lengthOfMonth())).atTime(10, 0)));
-      buy.setDescription("ETF Mondo (esempio)");
-      buy.setIsin(ETF_ISIN);
-      buy.setQuantity(BigDecimal.valueOf(2 + rng.nextInt(2)));
-      buy.setStockPrice(close);
-      buy.setFee(BigDecimal.ONE.negate());
-      buy.setCurrency("EUR");
-      buy.setFeeCurrency("EUR");
-      if (!buy.getDatetime().toLocalDateTime().toLocalDate().isAfter(today)) {
-        buys.add(buy);
+      prices.add(price(ETF_SYMBOL, ETF_ISIN, month, close));
+      trades.add(trade(ETF_ISIN, "ETF Mondo (esempio)", month, BigDecimal.valueOf(2 + rng.nextInt(2)), close));
+      if (month.equals(sale)) {
+        trades.add(trade(ETF_ISIN, "ETF Mondo (esempio)", month.plusDays(10), BigDecimal.valueOf(-6), close));
       }
     }
+    save(prices, trades, today);
+  }
+
+  private void bonds(LocalDate today, Random rng) {
+    List<Stock> prices = new ArrayList<>();
+    List<BrokerTransaction> trades = new ArrayList<>();
+    double price = 50;
+    LocalDate start = today.minusYears(2).withDayOfMonth(1);
+    for (LocalDate month = start; !month.isAfter(today); month = month.plusMonths(1)) {
+      price = price * Math.exp(0.002 + 0.01 * rng.nextGaussian());
+      BigDecimal close = money(price);
+      prices.add(price(BOND_SYMBOL, BOND_ISIN, month, close));
+      if (month.getMonthValue() % 3 == start.getMonthValue() % 3) {
+        trades.add(trade(BOND_ISIN, "Obbligazioni Euro (esempio)", month, BigDecimal.TEN, close));
+      }
+    }
+    save(prices, trades, today);
+  }
+
+  private static Stock price(String symbol, String isin, LocalDate month, BigDecimal close) {
+    return new Stock(symbol, isin, Timestamp.valueOf(month.atStartOfDay()), close, close, close, close,
+        Currency.getInstance("EUR"), 0L);
+  }
+
+  /** a trade on the 3rd of the month (or on that day, after the 1st), fee 1 euro */
+  private static BrokerTransaction trade(String isin, String name, LocalDate day, BigDecimal quantity, BigDecimal price) {
+    BrokerTransaction t = new BrokerTransaction();
+    LocalDate on = day.getDayOfMonth() == 1 ? day.withDayOfMonth(Math.min(3, day.lengthOfMonth())) : day;
+    t.setDatetime(Timestamp.valueOf(on.atTime(10, 0)));
+    t.setDescription(name);
+    t.setIsin(isin);
+    t.setQuantity(quantity);
+    t.setStockPrice(price);
+    t.setFee(BigDecimal.ONE.negate());
+    t.setCurrency("EUR");
+    t.setFeeCurrency("EUR");
+    return t;
+  }
+
+  private void save(List<Stock> prices, List<BrokerTransaction> trades, LocalDate today) {
     stockRepository.saveAllAndFlush(prices);
-    brokerTransactionRepository.saveAllAndFlush(buys);
+    brokerTransactionRepository.saveAllAndFlush(trades.stream()
+        .filter(t -> !t.getDatetime().toLocalDateTime().toLocalDate().isAfter(today)).toList());
   }
 
   private void realEstate() {

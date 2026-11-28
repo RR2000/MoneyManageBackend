@@ -81,7 +81,7 @@ class NetWorthTests {
     assertEquals("EUR", answer.get("currency").asString());
     assertEquals(2, answer.get("accounts").asInt());
     assertEquals(1, answer.get("realEstates").asInt());
-    assertEquals(1, answer.get("instruments").asInt());
+    assertEquals(2, answer.get("instruments").asInt());
     assertEquals(0, answer.get("excluded").get("accounts").asInt());
     assertEquals(0, answer.get("excluded").get("currencies").size());
 
