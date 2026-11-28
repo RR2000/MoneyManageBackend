@@ -67,20 +67,8 @@ public class GitHubUserService implements OAuth2UserService<OAuth2UserRequest, O
           "The GitHub account has no verified email.", null));
     }
     User user = users.findFirstByEmailIn(verified)
-        .orElseGet(() -> authService.createAccount(freeUsername(gitHubLogin), null, verified.getFirst()));
+        .orElseGet(() -> authService.createAccount(authService.freeUsername(gitHubLogin, "gh"), null, verified.getFirst()));
     return new DefaultOAuth2User(AuthorityUtils.createAuthorityList("ROLE_" + user.getRole()),
         Map.of("username", user.getUsername()), "username");
-  }
-
-  /** The GitHub login if free (and valid here), otherwise login-gh, login-gh2... */
-  private String freeUsername(String login) {
-    String base = login.replaceAll("[^A-Za-z0-9._-]", "");
-    if (base.length() < 3) base = "github-" + base;
-    if (base.length() > 26) base = base.substring(0, 26);
-    String candidate = base;
-    for (int i = 1; users.existsByUsernameIgnoreCase(candidate); i++) {
-      candidate = base + "-gh" + (i == 1 ? "" : i);
-    }
-    return candidate;
   }
 }

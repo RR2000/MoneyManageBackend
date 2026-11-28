@@ -23,6 +23,18 @@ public class User {
   @Column(unique = true)
   private String email;
 
+  /** Subject at the site's OpenID provider (login unico), set at the first login with it; null if never used. */
+  @Column(name = "idp_subject", unique = true)
+  private String idpSubject;
+
+  public String getIdpSubject() {
+    return idpSubject;
+  }
+
+  public void setIdpSubject(String idpSubject) {
+    this.idpSubject = idpSubject;
+  }
+
   public String getEmail() {
     return email;
   }

@@ -171,6 +171,18 @@ sees only its own data.
   `/api/auth/password/reset` with the token of the link). The account's email is set from a confirmation link
   (`POST /api/account/email`, then `/api/auth/email/confirm`), also at registration. Each user has a PostgreSQL schema of their own
   (Hibernate multi-tenancy, schema per user): data never mix.
+- **Single sign-on** ("Continue with raoulrondinella.dev", OpenID Connect, Zitadel), chosen with `AUTH_MODE`:
+  `legacy` (default: password and GitHub, the provider off even if configured), `both`, `oidc` (only the provider:
+  login, registration and password reset answer 404, no GitHub). Changing the value back is the rollback: accounts
+  do not change. Public client with PKCE (no secret), registration `zitadel` of Spring Security `oauth2Login`, redirect
+  URI `https://<site>/api/login/oauth2/code/zitadel`. The account is the one linked to the provider's `sub`
+  (`users.idp_subject`); at the first login, only with `email_verified`, the account with the same confirmed email is
+  linked, otherwise a new account (with its schema) is created; an email still waiting for its confirmation link on
+  some account is refused. Back at `/login#token=...&id_token=...` or `/login#oidc-error=<code>` (`email-unverified`,
+  `email-unconfirmed`, `already-linked`, `unavailable`, `failed`). `GET /api/auth/providers` says `oidc`, `oidcUrl`
+  and `oidcLogoutUrl` (the provider's `end_session_endpoint` with `client_id` and `post_logout_redirect_uri`
+  `<MONEY_WEB_URL>/`; the web app adds `id_token_hint`). The provider is read from its discovery document after the
+  start, never before: if it is down the site starts and the other logins work.
 
 API docs: `/swagger-ui.html` on the backend, when `MONEY_API_DOCS=true` (on in the local run).
 
@@ -194,6 +206,9 @@ The database user must be able to create schemas in its database (one schema per
 | `DB_URL` | `jdbc:postgresql://localhost:5432/money` | JDBC URL |
 | `DB_USER` / `DB_PASSWORD` | `money` / empty | credentials |
 | `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | empty (off) | GitHub OAuth App for "Accedi con GitHub", callback `https://<site>/api/login/oauth2/code/github` |
+| `AUTH_MODE` | `legacy` | `legacy`, `both` or `oidc` (see "Single sign-on"); `oidc` without the two below: no start |
+| `MONEY_OIDC_ISSUER` | empty (off) | issuer of the OpenID provider, e.g. `https://auth.example.org` (discovery at `/.well-known/openid-configuration`) |
+| `MONEY_OIDC_CLIENT_ID` | empty (off) | client id of a public client with PKCE at the provider |
 | `MONEY_JWT_SECRET` | random at every start | HMAC key (>= 32 random characters, otherwise no start) of the login tokens |
 | `MONEY_PRICES_API_KEY` | empty (Yahoo and CSV only) | Alpha Vantage key for the prices of the investments (free plan) |
 | `SMTP_HOST` / `SMTP_PORT` | empty (off) / `587` | SMTP relay for the emails (STARTTLS required) |
