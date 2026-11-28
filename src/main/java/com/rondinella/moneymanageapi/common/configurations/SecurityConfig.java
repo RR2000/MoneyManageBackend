@@ -6,12 +6,15 @@ import com.rondinella.moneymanageapi.auth.github.GitHubUserService;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import com.rondinella.moneymanageapi.auth.oidc.OidcAccounts;
+import com.rondinella.moneymanageapi.auth.oidc.OidcLinkRequests;
+import com.rondinella.moneymanageapi.auth.oidc.OidcLinks;
 import com.rondinella.moneymanageapi.auth.oidc.OidcLogin;
 import org.springframework.security.config.ObjectPostProcessor;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.oauth2.client.registration.ClientRegistration;
 import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
 import org.springframework.security.oauth2.client.web.OAuth2AuthorizationRequestRedirectFilter;
+import org.springframework.security.oauth2.client.web.OAuth2LoginAuthenticationFilter;
 import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
 import org.springframework.security.oauth2.core.oidc.user.OidcUser;
 import org.springframework.security.oauth2.core.user.OAuth2User;
@@ -46,6 +49,7 @@ public class SecurityConfig {
                                                  GitHubUserService gitHubUsers,
                                                  OidcLogin oidc,
                                                  OidcAccounts oidcAccounts,
+                                                 OidcLinks oidcLinks,
                                                  AuthService authService) throws Exception {
     http
         .cors(cors -> cors.configurationSource(corsConfigurationSource))
@@ -80,11 +84,20 @@ public class SecurityConfig {
       http.oauth2Login(oauth2 -> oauth2
           .loginPage("/login")
           .clientRegistrationRepository(registrations)
-          .authorizationEndpoint(a -> a.baseUri(GitHubLogin.AUTHORIZATION_BASE))
+          // "Collega a raoulrondinella.dev" (OidcLinks): ?link=(request) binds the state to the logged-in account
+          .authorizationEndpoint(a -> a.baseUri(GitHubLogin.AUTHORIZATION_BASE)
+              .authorizationRequestResolver(
+                  new OidcLinkRequests(registrations, GitHubLogin.AUTHORIZATION_BASE, oidcLinks)))
           .redirectionEndpoint(r -> r.baseUri(GitHubLogin.CALLBACK_BASE + "/*"))
-          .userInfoEndpoint(u -> u.userService(gitHubUsers).oidcUserService(oidcAccounts))
+          // the site's OpenID provider: Spring Security's checks, then OidcAccounts decides the account (below)
+          .userInfoEndpoint(u -> u.userService(gitHubUsers))
           .successHandler((request, response, authentication) -> {
             Object principal = authentication.getPrincipal();
+            if (principal instanceof OidcAccounts.LocalOidcUser user && user.link()) {
+              // linked from the settings page, already logged in there: back to it (the id token for the logout)
+              response.sendRedirect("/settings#oidc-link=linked&id_token=" + user.getIdToken().getTokenValue());
+              return;
+            }
             String token = authService.tokenFor(((OAuth2User) principal).getName());
             String fragment = "token=" + token;
             if (principal instanceof OidcUser user) {
@@ -93,15 +106,37 @@ public class SecurityConfig {
             response.sendRedirect("/login#" + fragment);
           })
           .failureHandler((request, response, exception) -> response.sendRedirect(
-              request.getRequestURI().endsWith("/" + OidcLogin.REGISTRATION_ID)
+              exception instanceof OidcLinks.Refused refused
+                  ? "/settings#oidc-link-error=" + refused.code()
+                  : request.getRequestURI().endsWith("/" + OidcLogin.REGISTRATION_ID)
                   ? "/login#oidc-error=" + oidcErrorCode(exception)
                   : "/login#github-error"))
-          // the provider cannot be reached (no registration): back to the login page, not an error page
+          // the provider cannot be reached (no registration): back to the login page, not an error page; a link
+          // request that is not good (or the provider down during a link): back to the settings page
           .withObjectPostProcessor(new ObjectPostProcessor<OAuth2AuthorizationRequestRedirectFilter>() {
             @Override
             public <O extends OAuth2AuthorizationRequestRedirectFilter> O postProcess(O filter) {
-              filter.setAuthenticationFailureHandler((request, response, exception) ->
-                  response.sendRedirect("/login#oidc-error=unavailable"));
+              filter.setAuthenticationFailureHandler((request, response, exception) -> {
+                Throwable cause = exception;
+                while (cause != null && !(cause instanceof OidcLinks.Refused)) {
+                  cause = cause.getCause();
+                }
+                if (cause instanceof OidcLinks.Refused refused) {
+                  response.sendRedirect("/settings#oidc-link-error=" + refused.code());
+                } else if (request.getParameter(OidcLinks.PARAMETER) != null) {
+                  response.sendRedirect("/settings#oidc-link-error=unavailable");
+                } else {
+                  response.sendRedirect("/login#oidc-error=unavailable");
+                }
+              });
+              return filter;
+            }
+          })
+          // who the provider's person is here, with the authorization request at hand (a link or a login)
+          .withObjectPostProcessor(new ObjectPostProcessor<OAuth2LoginAuthenticationFilter>() {
+            @Override
+            public <O extends OAuth2LoginAuthenticationFilter> O postProcess(O filter) {
+              filter.setAuthenticationResultConverter(oidcAccounts::authenticate);
               return filter;
             }
           }));

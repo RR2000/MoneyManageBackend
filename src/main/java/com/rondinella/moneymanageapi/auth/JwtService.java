@@ -1,6 +1,7 @@
 package com.rondinella.moneymanageapi.auth;
 
 import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 import jakarta.annotation.PostConstruct;
@@ -8,9 +9,15 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
 
+import javax.crypto.Mac;
 import javax.crypto.SecretKey;
+import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
+import java.security.GeneralSecurityException;
+import java.time.Duration;
 import java.util.Date;
+import java.util.Map;
+import java.util.Optional;
 import java.util.function.Function;
 
 @Service
@@ -25,6 +32,8 @@ public class JwtService {
   private long jwtExpiration;
 
   private SecretKey signingKey;
+  /** For other signed values (the request to link the single sign-on): a key of its own, never a login token. */
+  private SecretKey purposeKey;
 
   @PostConstruct
   void init() {
@@ -39,6 +48,50 @@ public class JwtService {
       // No secret configured: random key for this run (tokens do not survive a restart).
       log.info("No MONEY_JWT_SECRET: random signing key, logins end at every restart");
       this.signingKey = Jwts.SIG.HS256.key().build();
+    }
+    this.purposeKey = Keys.hmacShaKeyFor(hmac(signingKey.getEncoded(), "money purpose-signed values"));
+  }
+
+  /**
+   * A short-lived signed value for one purpose (the audience), signed with a key derived from the login key: it is
+   * never accepted as a login token, and a login token is never accepted here.
+   */
+  public String signForPurpose(String purpose, String subject, String id, Map<String, String> claims, Duration ttl) {
+    long now = System.currentTimeMillis();
+    var builder = Jwts.builder()
+        .audience().add(purpose).and()
+        .subject(subject)
+        .id(id)
+        .issuedAt(new Date(now))
+        .expiration(new Date(now + ttl.toMillis()));
+    claims.forEach(builder::claim);
+    return builder.signWith(purposeKey, Jwts.SIG.HS256).compact();
+  }
+
+  /** The claims of a value signed by {@link #signForPurpose} for this purpose and not expired, or empty. */
+  public Optional<Claims> verifyForPurpose(String purpose, String value) {
+    if (value == null || value.isBlank() || value.length() > 2000) {
+      return Optional.empty();
+    }
+    try {
+      return Optional.of(Jwts.parser()
+          .verifyWith(purposeKey)
+          .requireAudience(purpose)
+          .build()
+          .parseSignedClaims(value)
+          .getPayload());
+    } catch (JwtException | IllegalArgumentException e) {
+      return Optional.empty();
+    }
+  }
+
+  private static byte[] hmac(byte[] key, String label) {
+    try {
+      Mac mac = Mac.getInstance("HmacSHA256");
+      mac.init(new SecretKeySpec(key, "HmacSHA256"));
+      return mac.doFinal(label.getBytes(StandardCharsets.UTF_8));
+    } catch (GeneralSecurityException e) {
+      throw new IllegalStateException(e);
     }
   }
 
