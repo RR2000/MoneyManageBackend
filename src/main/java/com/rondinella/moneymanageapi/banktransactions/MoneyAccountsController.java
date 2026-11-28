@@ -25,8 +25,8 @@ public class MoneyAccountsController {
   public record DeleteRequest(String name, String confirm) {
   }
 
-  /** search of the movements: words or an amount, in or out, and the page */
-  public record MovementsRequest(String q, AccountPages.Kind kind, Integer offset, Integer limit) {
+  /** search of the movements: words or an amount, in or out, only the ones without a category, and the page */
+  public record MovementsRequest(String q, AccountPages.Kind kind, Boolean uncategorized, Integer offset, Integer limit) {
   }
 
   private final MoneyAccounts accounts;
@@ -57,9 +57,19 @@ public class MoneyAccountsController {
 
   @PostMapping("/{id}/movements")
   public AccountPages.Page movements(@PathVariable String id, @RequestBody(required = false) MovementsRequest body) {
-    MovementsRequest r = body == null ? new MovementsRequest(null, null, null, null) : body;
+    return search(id, body);
+  }
+
+  /** the movements of every account, newest first, with the same search (e.g. the ones without a category) */
+  @PostMapping("/movements")
+  public AccountPages.Page allMovements(@RequestBody(required = false) MovementsRequest body) {
+    return search(null, body);
+  }
+
+  private AccountPages.Page search(String id, MovementsRequest body) {
+    MovementsRequest r = body == null ? new MovementsRequest(null, null, null, null, null) : body;
     return pages.movements(id, r.q(), r.kind() == null ? AccountPages.Kind.ALL : r.kind(),
-        r.offset() == null ? 0 : r.offset(), r.limit() == null ? 50 : r.limit());
+        Boolean.TRUE.equals(r.uncategorized()), r.offset() == null ? 0 : r.offset(), r.limit() == null ? 50 : r.limit());
   }
 
   @GetMapping

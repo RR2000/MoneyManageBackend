@@ -5,6 +5,7 @@ import com.rondinella.moneymanageapi.banktransactions.BankTransactionDto;
 import com.rondinella.moneymanageapi.banktransactions.BankTransactionService;
 import com.rondinella.moneymanageapi.brokertransactions.BrokerTransaction;
 import com.rondinella.moneymanageapi.brokertransactions.BrokerTransactionRepository;
+import com.rondinella.moneymanageapi.categories.Categories;
 import com.rondinella.moneymanageapi.realestate.RealEstateDto;
 import com.rondinella.moneymanageapi.realestate.RealEstateService;
 import com.rondinella.moneymanageapi.stocks.Stock;
@@ -25,8 +26,9 @@ import java.util.Random;
 /**
  * Made-up data for a new account, so the dashboard has something to show: a year of movements on two bank
  * accounts, a fake ETF bought every month (a few sold four months ago) and a fake bond ETF bought every three months
- * (with their own fake price history, no market data calls), a flat, a car, some gold and a car loan.
- * Every name says "esempio": nothing here is real.
+ * (with their own fake price history, no market data calls), a flat, a car, some gold and a car loan; categories
+ * with their rules (rent, bills, subscriptions and the car insurance are fixed costs; some small expenses stay without
+ * a category). Every name says "esempio": nothing here is real.
  */
 @Service
 public class SampleData {
@@ -44,20 +46,25 @@ public class SampleData {
   private final StockRepository stockRepository;
   private final RealEstateService realEstateService;
   private final Assets assets;
+  private final Categories categories;
 
   public SampleData(BankTransactionService bankTransactionService, BrokerTransactionRepository brokerTransactionRepository,
-                    StockRepository stockRepository, RealEstateService realEstateService, Assets assets) {
+                    StockRepository stockRepository, RealEstateService realEstateService, Assets assets,
+                    Categories categories) {
     this.bankTransactionService = bankTransactionService;
     this.brokerTransactionRepository = brokerTransactionRepository;
     this.stockRepository = stockRepository;
     this.realEstateService = realEstateService;
     this.assets = assets;
+    this.categories = categories;
   }
 
   /** Fills the schema of the current user (see TenantContext.runAs). */
   public void load() {
     LocalDate today = LocalDate.now();
     Random rng = new Random(2024);
+    // before the movements: the rules give them their category as they arrive
+    categories();
     bankMovements(today, rng);
     // own seed: the price path does not depend on how many bank movements came before (a calm, rising one)
     etf(today, new Random(3));
@@ -85,9 +92,41 @@ public class SampleData {
         txs.add(tx(CHECKING, day, 19, what, -(8 + rng.nextInt(55))));
       }
     }
+    fixedCosts(txs, start, today);
     bankTransactionService.addTransactions(txs);
     bankTransactionService.computeCumulativeAmount(CHECKING, new BigDecimal("3480.25"));
     bankTransactionService.computeCumulativeAmount(SAVINGS, new BigDecimal("9120.00"));
+  }
+
+  /** Fixed costs (Casa, Bollette, Abbonamenti, Assicurazioni) and three other categories, each with its rules. */
+  private void categories() {
+    categories.seed("Casa (esempio)", true, "affitto");
+    categories.seed("Bollette (esempio)", true, "bollette luce", "bolletta gas");
+    categories.seed("Abbonamenti (esempio)", true, "abbonamento");
+    categories.seed("Assicurazioni (esempio)", true, "assicurazione");
+    categories.seed("Spesa (esempio)", false, "supermercato");
+    categories.seed("Stipendio (esempio)", false, "stipendio");
+    categories.seed("Giroconti (esempio)", false, "giroconto");
+  }
+
+  /**
+   * Costs with other cadences, with a random of their own (the movements before stay the same): a phone every month,
+   * gas every two months, the car insurance once a year (on the first day of the first month and of this month).
+   */
+  private static void fixedCosts(List<BankTransactionDto> txs, LocalDate start, LocalDate today) {
+    Random rng = new Random(11);
+    for (LocalDate month = start; !month.isAfter(today); month = month.plusMonths(1)) {
+      LocalDate phone = month.withDayOfMonth(3);
+      if (!phone.isAfter(today)) {
+        txs.add(tx(CHECKING, phone, 7, "Abbonamento telefono (esempio)", -12.99));
+      }
+      LocalDate gas = month.withDayOfMonth(12);
+      if (month.getMonthValue() % 2 == start.getMonthValue() % 2 && !gas.isAfter(today)) {
+        txs.add(tx(CHECKING, gas, 10, "Bolletta gas (esempio)", -(60 + rng.nextInt(35))));
+      }
+    }
+    txs.add(tx(CHECKING, start, 15, "Assicurazione auto (esempio)", -540));
+    txs.add(tx(CHECKING, today.withDayOfMonth(1), 15, "Assicurazione auto (esempio)", -540));
   }
 
   private void etf(LocalDate today, Random rng) {

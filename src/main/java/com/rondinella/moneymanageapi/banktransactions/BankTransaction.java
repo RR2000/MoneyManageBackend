@@ -16,6 +16,8 @@ import java.sql.Timestamp;
 /**
  * One movement of a bank account. Every movement has an id of its own: two movements of the same day with the same
  * description are two rows. {@link #externalRef} is the bank's id of the movement (open banking), unique per account.
+ * {@link #categoryId} is its category (null: none), {@link #categorySource} who gave it: a rule (another rule may change
+ * it) or the user (no rule touches it).
  */
 @Getter
 @Setter
@@ -27,6 +29,12 @@ public class BankTransaction {
     FILE,
     MANUAL,
     BANK
+  }
+
+  /** Who gave a movement its category. */
+  public enum CategorySource {
+    RULE,
+    MANUAL
   }
 
   @Id
@@ -43,4 +51,7 @@ public class BankTransaction {
   @Column(nullable = false)
   Source source = Source.FILE;
   String externalRef;
+  Long categoryId;
+  @Enumerated(EnumType.STRING)
+  CategorySource categorySource;
 }

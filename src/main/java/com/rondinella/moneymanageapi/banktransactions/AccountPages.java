@@ -40,8 +40,10 @@ public class AccountPages {
                        boolean linked) {
   }
 
+  /** a movement with its account (and the id of its page) and its category (null: none) */
   public record Movement(long id, Timestamp datetime, String description, BigDecimal amount, String currency,
-                         BankTransaction.Source source, BigDecimal balance) {
+                         BankTransaction.Source source, BigDecimal balance, String accountId, String account,
+                         Long categoryId, String category, BankTransaction.CategorySource categorySource) {
   }
 
   public record Page(List<Movement> items, boolean hasMore) {
@@ -120,18 +122,25 @@ public class AccountPages {
   }
 
   /**
-   * Movements newest first. {@code q}: words of the description (any case) or an amount ("64.2", "64,20", "-64.2":
-   * the sign is ignored); {@code kind}: money in, out or all; {@code offset}/{@code limit} for "load more".
+   * Movements newest first, of one account ({@code id}) or of every account ({@code id} null). {@code q}: words of the
+   * description (any case) or an amount ("64.2", "64,20", "-64.2": the sign is ignored); {@code kind}: money in, out or
+   * all; {@code uncategorized}: only the ones without a category; {@code offset}/{@code limit} for "load more".
    */
   @Transactional(readOnly = true)
-  public Page movements(String id, String q, Kind kind, int offset, int limit) {
-    String name = nameOf(id);
+  public Page movements(String id, String q, Kind kind, boolean uncategorized, int offset, int limit) {
+    String name = id == null ? null : nameOf(id);
     int size = Math.max(1, Math.min(limit <= 0 ? 50 : limit, MAX_LIMIT));
-    StringBuilder jpql = new StringBuilder("SELECT t FROM BankTransaction t WHERE t.account = :a");
+    StringBuilder jpql = new StringBuilder("SELECT t FROM BankTransaction t WHERE 1 = 1");
+    if (name != null) {
+      jpql.append(" AND t.account = :a");
+    }
     if (kind == Kind.IN) {
       jpql.append(" AND t.amount > 0");
     } else if (kind == Kind.OUT) {
       jpql.append(" AND t.amount < 0");
+    }
+    if (uncategorized) {
+      jpql.append(" AND t.categoryId IS NULL");
     }
     String text = q == null ? "" : q.strip();
     BigDecimal number = parseAmount(text);
@@ -140,7 +149,10 @@ public class AccountPages {
           : " AND lower(t.description) LIKE :q ESCAPE '\\'");
     }
     jpql.append(" ORDER BY t.datetime DESC, t.id DESC");
-    TypedQuery<BankTransaction> query = em.createQuery(jpql.toString(), BankTransaction.class).setParameter("a", name);
+    TypedQuery<BankTransaction> query = em.createQuery(jpql.toString(), BankTransaction.class);
+    if (name != null) {
+      query.setParameter("a", name);
+    }
     if (!text.isEmpty()) {
       query.setParameter("q", "%" + likeEscape(text.toLowerCase(Locale.ROOT)) + "%");
       if (number != null) {
@@ -148,13 +160,32 @@ public class AccountPages {
       }
     }
     List<BankTransaction> rows = query.setFirstResult(Math.max(0, offset)).setMaxResults(size + 1).getResultList();
+    Map<Long, String> categories = new HashMap<>();
+    for (Object[] row : em.createQuery("SELECT c.id, c.name FROM Category c", Object[].class).getResultList()) {
+      categories.put((Long) row[0], (String) row[1]);
+    }
+    Map<String, String> currencies = name != null ? Map.of() : currencies(rows);
     List<Movement> items = new ArrayList<>();
     for (int i = 0; i < Math.min(size, rows.size()); i++) {
       BankTransaction t = rows.get(i);
-      items.add(new Movement(t.getId(), t.getDatetime(), t.getDescription(), t.getAmount(), t.getCurrency(), t.getSource(),
-          t.getCumulativeAmount()));
+      String currency = t.getCurrency() != null || name != null ? t.getCurrency()
+          : currencies.getOrDefault(t.getAccount(), "EUR");
+      items.add(new Movement(t.getId(), t.getDatetime(), t.getDescription(), t.getAmount(), currency, t.getSource(),
+          t.getCumulativeAmount(), idOf(t.getAccount()), t.getAccount(), t.getCategoryId(),
+          t.getCategoryId() == null ? null : categories.get(t.getCategoryId()), t.getCategorySource()));
     }
     return new Page(items, rows.size() > size);
+  }
+
+  /** the most used currency of the accounts of rows without one */
+  private Map<String, String> currencies(List<BankTransaction> rows) {
+    Map<String, String> currencies = new HashMap<>();
+    if (rows.stream().anyMatch(t -> t.getCurrency() == null)) {
+      for (Object[] row : transactions.countByAccountAndCurrency()) {
+        currencies.putIfAbsent((String) row[0], (String) row[1]);
+      }
+    }
+    return currencies;
   }
 
   /** The newest movements of every account, newest first (at most {@link #MAX_LATEST}). */
@@ -163,12 +194,7 @@ public class AccountPages {
     int size = Math.max(1, Math.min(limit <= 0 ? 8 : limit, MAX_LATEST));
     List<BankTransaction> rows = em.createQuery("SELECT t FROM BankTransaction t ORDER BY t.datetime DESC, t.id DESC",
         BankTransaction.class).setMaxResults(size).getResultList();
-    Map<String, String> currencies = new HashMap<>();
-    if (rows.stream().anyMatch(t -> t.getCurrency() == null)) {
-      for (Object[] row : transactions.countByAccountAndCurrency()) {
-        currencies.putIfAbsent((String) row[0], (String) row[1]);
-      }
-    }
+    Map<String, String> currencies = currencies(rows);
     return rows.stream().map(t -> new Latest(t.getId(), idOf(t.getAccount()), t.getAccount(), t.getDatetime(),
         t.getDescription(), t.getAmount(), t.getCurrency() != null ? t.getCurrency()
         : currencies.getOrDefault(t.getAccount(), "EUR"), t.getSource())).toList();

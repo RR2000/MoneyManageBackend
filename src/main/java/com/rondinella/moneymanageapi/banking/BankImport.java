@@ -3,6 +3,7 @@ package com.rondinella.moneymanageapi.banking;
 import com.rondinella.moneymanageapi.banking.EnableBanking.Tx;
 import com.rondinella.moneymanageapi.banktransactions.BankTransaction;
 import com.rondinella.moneymanageapi.banktransactions.BankTransactionRepository;
+import com.rondinella.moneymanageapi.categories.Categorizer;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
@@ -38,6 +39,7 @@ import java.util.Set;
  *   <li>With {@code bankWins} (a whole history asked by the user, or "replace with the bank's data") the bank is the
  *   truth: more rows than movements is not ambiguous any more, the first rows (by id) get the movements and the rest
  *   stay without a bank id, so every movement of the bank ends up in the account exactly once.</li>
+ *   <li>A new row gets the category of its rule ({@link Categorizer}); a matched row keeps its own.</li>
  * </ul>
  */
 @Component
@@ -50,9 +52,11 @@ public class BankImport {
   }
 
   private final BankTransactionRepository transactions;
+  private final Categorizer categorizer;
 
-  public BankImport(BankTransactionRepository transactions) {
+  public BankImport(BankTransactionRepository transactions, Categorizer categorizer) {
     this.transactions = transactions;
+    this.categorizer = categorizer;
   }
 
   public Result importInto(String moneyAccount, LocalDate syncFrom, List<Tx> txs) {
@@ -120,6 +124,7 @@ public class BankImport {
         }
       }
     }
+    categorizer.categorize(toSave.stream().filter(t -> t.getId() == null).toList());
     transactions.saveAllAndFlush(toSave);
     return new Result(imported, matched, ambiguous, last);
   }
