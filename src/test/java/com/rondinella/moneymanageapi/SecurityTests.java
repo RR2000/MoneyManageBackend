@@ -1,10 +1,12 @@
 package com.rondinella.moneymanageapi;
 
+import com.rondinella.moneymanageapi.banktransactions.AccountPages;
 import com.rondinella.moneymanageapi.demo.SampleData;
 import io.jsonwebtoken.Jwts;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockMultipartFile;
@@ -14,7 +16,6 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 import tools.jackson.databind.json.JsonMapper;
 
-import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Date;
@@ -34,6 +35,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /** What a public site with real money data needs: users never see each other, guessing is slowed, errors say little. */
 @SpringBootTest(properties = "app.auth.max-registrations=10000")
 @AutoConfigureMockMvc
+@Import(ManualMovements.class)
 class SecurityTests {
 
   private static final Pattern TOKEN = Pattern.compile("\"token\"\\s*:\\s*\"([^\"]+)\"");
@@ -41,6 +43,8 @@ class SecurityTests {
 
   @Autowired
   MockMvc mvc;
+  @Autowired
+  ManualMovements movements;
 
   @DynamicPropertySource
   static void database(DynamicPropertyRegistry registry) {
@@ -71,21 +75,21 @@ class SecurityTests {
 
   /** Everything alice can read, endpoint by endpoint (no market data calls). */
   private List<String> everything(String auth) throws Exception {
-    LocalDate today = LocalDate.now();
-    String from = today.minusYears(2) + " 00:00:00.000";
-    String to = today + " 23:59:59.999";
     List<String> all = new ArrayList<>();
-    all.add(body(get("/api/banks/transactions"), auth));
     all.add(body(get("/api/banks/transactions/accounts"), auth));
+    all.add(body(get("/api/money-accounts"), auth));
     for (String account : List.of(SampleData.CHECKING, SampleData.SAVINGS)) {
-      all.add(body(get("/api/banks/transactions/accounts/{a}", account), auth));
-      all.add(body(get("/api/banks/transactions/accounts/{a}/{t}", account, today + " 00:00:00.000"), auth));
-      all.add(body(get("/api/banks/transactions/table/{f}/{t}", from, to).param("accountName", account), auth));
-      all.add(body(get("/api/banks/transactions/daily-balance/{a}", account), auth));
+      String id = AccountPages.idOf(account);
+      all.add(body(get("/api/money-accounts/{id}", id), auth));
+      all.add(body(get("/api/money-accounts/{id}/balances", id), auth));
+      all.add(body(post("/api/money-accounts/{id}/movements", id).contentType(MediaType.APPLICATION_JSON).content("{}"), auth));
     }
-    all.add(body(get("/api/banks/transactions/graph/{f}/{t}", from, to), auth));
-    all.add(body(get("/api/brokers/transactions/worth/graph"), auth));
-    all.add(body(get("/api/montecarlo").param("years", "1").param("simulations", "200"), auth));
+    all.add(body(post("/api/money-accounts/movements").contentType(MediaType.APPLICATION_JSON).content("{}"), auth));
+    all.add(body(get("/api/money-accounts/movements/latest"), auth));
+    all.add(body(get("/api/net-worth"), auth));
+    all.add(body(get("/api/investments"), auth));
+    all.add(body(get("/api/categories"), auth));
+    all.add(body(get("/api/fixed-costs"), auth));
     all.add(body(get("/api/realestate"), auth));
     all.add(body(get("/api/assets"), auth));
     all.add(body(get("/api/plans"), auth));
@@ -100,24 +104,20 @@ class SecurityTests {
     String aliceFlat = JSON.readTree(body(get("/api/realestate"), alice)).get(0).get("id").asString();
 
     // bob, empty, reads alice's account names and ids: nothing
-    LocalDate today = LocalDate.now();
-    mvc.perform(get("/api/banks/transactions").header("Authorization", bob)).andExpect(jsonPath("$", hasSize(0)));
+    String checking = AccountPages.idOf(SampleData.CHECKING);
     mvc.perform(get("/api/banks/transactions/accounts").header("Authorization", bob)).andExpect(jsonPath("$", hasSize(0)));
-    mvc.perform(get("/api/banks/transactions/accounts/{a}", SampleData.CHECKING).header("Authorization", bob))
-        .andExpect(jsonPath("$", hasSize(0)));
-    mvc.perform(get("/api/banks/transactions/accounts/{a}/{t}", SampleData.CHECKING, today + " 00:00:00.000")
-        .header("Authorization", bob)).andExpect(content().string("0"));
-    mvc.perform(get("/api/banks/transactions/table/{f}/{t}", today.minusYears(2) + " 00:00:00.000", today + " 23:59:59.999")
-        .param("accountName", SampleData.CHECKING).header("Authorization", bob)).andExpect(jsonPath("$", hasSize(0)));
-    mvc.perform(get("/api/banks/transactions/daily-balance/{a}", SampleData.CHECKING).header("Authorization", bob))
-        .andExpect(jsonPath("$", hasSize(0)));
-    mvc.perform(get("/api/banks/transactions/graph/{f}/{t}", today.minusYears(2) + " 00:00:00.000", today + " 23:59:59.999")
-        .header("Authorization", bob)).andExpect(status().isOk())
-        .andExpect(jsonPath("$.uniqueGraphNames", not(hasItem(SampleData.CHECKING))));
-    mvc.perform(get("/api/brokers/transactions/worth/graph").header("Authorization", bob))
-        .andExpect(jsonPath("$.uniqueGraphNames", not(hasItem(SampleData.ETF_ISIN))));
-    mvc.perform(get("/api/montecarlo").header("Authorization", bob))
-        .andExpect(status().isOk()).andExpect(jsonPath("$.uniqueGraphNames", anyOf(nullValue(), hasSize(0))));
+    mvc.perform(get("/api/money-accounts").header("Authorization", bob)).andExpect(jsonPath("$", hasSize(0)));
+    mvc.perform(get("/api/money-accounts/{id}", checking).header("Authorization", bob)).andExpect(status().isNotFound());
+    mvc.perform(get("/api/money-accounts/{id}/balances", checking).header("Authorization", bob))
+        .andExpect(status().isNotFound());
+    mvc.perform(post("/api/money-accounts/{id}/movements", checking).header("Authorization", bob)
+        .contentType(MediaType.APPLICATION_JSON).content("{}")).andExpect(status().isNotFound());
+    mvc.perform(post("/api/money-accounts/movements").header("Authorization", bob)
+        .contentType(MediaType.APPLICATION_JSON).content("{}")).andExpect(jsonPath("$.items", hasSize(0)));
+    mvc.perform(get("/api/money-accounts/movements/latest").header("Authorization", bob)).andExpect(jsonPath("$", hasSize(0)));
+    mvc.perform(get("/api/net-worth").header("Authorization", bob)).andExpect(status().isOk())
+        .andExpect(jsonPath("$.accounts").value(0));
+    mvc.perform(get("/api/investments").header("Authorization", bob)).andExpect(jsonPath("$.positions", hasSize(0)));
     mvc.perform(get("/api/realestate").header("Authorization", bob)).andExpect(jsonPath("$", hasSize(0)));
     mvc.perform(get("/api/assets").header("Authorization", bob)).andExpect(jsonPath("$.otherAssets", hasSize(0)))
         .andExpect(jsonPath("$.debts", hasSize(0))).andExpect(jsonPath("$.totals[0].net").value(0));
@@ -130,10 +130,8 @@ class SecurityTests {
     mvc.perform(delete("/api/realestate/{id}", aliceFlat).header("Authorization", bob));
     mvc.perform(post("/api/banks/transactions/accounts/{a}/balance", SampleData.CHECKING).header("Authorization", bob)
         .contentType(MediaType.APPLICATION_JSON).content("{\"amountToday\": 1}")).andExpect(content().string("false"));
-    mvc.perform(post("/api/banks/transactions").header("Authorization", bob).contentType(MediaType.APPLICATION_JSON)
-        .content("[{\"account\":\"" + SampleData.CHECKING + "\",\"datetime\":\"2025-01-02T10:00:00.000+00:00\","
-            + "\"description\":\"Bob\",\"amount\":5,\"fee\":0,\"currency\":\"EUR\"}]"))
-        .andExpect(status().isCreated());
+    movements.add(bob, "[{\"account\":\"" + SampleData.CHECKING + "\",\"datetime\":\"2025-01-02T10:00:00.000+00:00\","
+        + "\"description\":\"Bob\",\"amount\":5,\"fee\":0,\"currency\":\"EUR\"}]");
     String csv = """
         Type,Product,Started Date,Completed Date,Description,Amount,Fee,Currency,State,Balance
         TOPUP,Current,2025-01-02 10:00:00,2025-01-02 10:00:01,Top-up,100.00,0.00,EUR,COMPLETED,100.00
@@ -152,8 +150,8 @@ class SecurityTests {
     // bob: only his own
     mvc.perform(get("/api/banks/transactions/accounts").header("Authorization", bob))
         .andExpect(jsonPath("$", containsInAnyOrder(SampleData.CHECKING, "Revolut_Current")));
-    mvc.perform(get("/api/banks/transactions/accounts/{a}", SampleData.CHECKING).header("Authorization", bob))
-        .andExpect(jsonPath("$", hasSize(1)));
+    mvc.perform(get("/api/money-accounts/{id}", checking).header("Authorization", bob))
+        .andExpect(jsonPath("$.rows").value(1));
   }
 
   @Test
@@ -162,7 +160,7 @@ class SecurityTests {
     String bob = register(user(), false);
     mvc.perform(post("/api/sample-data").header("Authorization", bob)).andExpect(status().isCreated());
     mvc.perform(post("/api/sample-data").header("Authorization", bob)).andExpect(status().isConflict());
-    mvc.perform(get("/api/banks/transactions").header("Authorization", alice)).andExpect(jsonPath("$", hasSize(0)));
+    mvc.perform(get("/api/money-accounts").header("Authorization", alice)).andExpect(jsonPath("$", hasSize(0)));
     mvc.perform(get("/api/realestate").header("Authorization", alice)).andExpect(jsonPath("$", hasSize(0)));
   }
 
@@ -262,14 +260,8 @@ class SecurityTests {
   @Test
   void heavyRequestsAreBounded() throws Exception {
     String auth = register(user(), false);
-    mvc.perform(get("/api/montecarlo").param("simulations", "100000000").header("Authorization", auth))
+    mvc.perform(get("/api/net-worth").param("from", "0001-01-01").header("Authorization", auth))
         .andExpect(status().isBadRequest());
-    mvc.perform(get("/api/montecarlo").param("years", "1000").header("Authorization", auth))
-        .andExpect(status().isBadRequest());
-    mvc.perform(get("/api/banks/transactions/graph/{f}/{t}", "0001-01-01 00:00:00.000", "9999-12-31 00:00:00.000")
-        .header("Authorization", auth)).andExpect(status().isBadRequest());
-    mvc.perform(get("/api/brokers/transactions/worth/graph").param("from", "2030-01-01 00:00:00.000")
-        .param("to", "2020-01-01 00:00:00.000").header("Authorization", auth)).andExpect(status().isBadRequest());
     // upload size: spring.servlet.multipart.* (MockMvc does not parse multipart: checked on the running app)
   }
 
@@ -291,6 +283,21 @@ class SecurityTests {
     // the old way, with the amount in the URL, is gone
     mvc.perform(get("/api/banks/transactions/accounts/{a}/computeCumulativeAmount/{v}", "x", "123.45")
         .header("Authorization", auth)).andExpect(status().is4xxClientError());
+  }
+
+  @Test
+  void theEndpointsOfTheOldDashboardAreGone() throws Exception {
+    String auth = register(user(), true);
+    for (String path : List.of("/api/banks/transactions", "/api/banks/transactions/accounts/{a}",
+        "/api/banks/transactions/accounts/{a}/2025-01-01 00:00:00.000", "/api/banks/transactions/daily-balance/{a}",
+        "/api/banks/transactions/graph/2025-01-01 00:00:00.000/2025-12-31 00:00:00.000",
+        "/api/banks/transactions/table/2025-01-01 00:00:00.000/2025-12-31 00:00:00.000",
+        "/api/brokers/transactions/worth", "/api/brokers/transactions/worth/2025-01-01",
+        "/api/brokers/transactions/worth/graph", "/api/brokers/transactions/luckySearch/{a}", "/api/montecarlo")) {
+      mvc.perform(get(path, SampleData.CHECKING).header("Authorization", auth)).andExpect(status().isNotFound());
+    }
+    mvc.perform(post("/api/banks/transactions").header("Authorization", auth).contentType(MediaType.APPLICATION_JSON)
+        .content("[]")).andExpect(status().is4xxClientError());
   }
 
   @Test

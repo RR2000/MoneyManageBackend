@@ -40,7 +40,18 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class PricesTests {
 
   private static final Pattern TOKEN = Pattern.compile("\"token\"\\s*:\\s*\"([^\"]+)\"");
-  private static final String GRAPH = "/api/brokers/transactions/worth/graph";
+  /** the investments page: positions with their last price and value, history with the worth of each ISIN */
+  private static final String INVESTMENTS = "/api/investments";
+
+  /** a field of the position of the ISIN, as a list (empty when the ISIN is not there) */
+  private static String position(String isin, String field) {
+    return "$.positions[?(@.isin == '" + isin + "')]." + field;
+  }
+
+  /** the worth of the ISIN at every point of the history (the days it was held) */
+  private static String history(String isin) {
+    return "$.history[*].byIsin['" + isin + "']";
+  }
 
   @Autowired
   MockMvc mvc;
@@ -95,12 +106,13 @@ class PricesTests {
     buy(auth, isin);
     when(yahoo.weekly(isin)).thenReturn(weekly(isin));
 
-    mvc.perform(get(GRAPH).header("Authorization", auth)).andExpect(status().isOk())
-        .andExpect(jsonPath("$.uniqueGraphNames", hasItem(isin)))
+    mvc.perform(get(INVESTMENTS).header("Authorization", auth)).andExpect(status().isOk())
+        .andExpect(jsonPath(position(isin, "lastPrice"), contains(comparesEqualTo(60.0))))
         // 10 held, at 60
-        .andExpect(jsonPath("$.graphData['" + isin + "'].*", everyItem(comparesEqualTo(600.0))));
-    mvc.perform(get(GRAPH).header("Authorization", auth)).andExpect(status().isOk())
-        .andExpect(jsonPath("$.uniqueGraphNames", hasItem(isin)));
+        .andExpect(jsonPath(history(isin), not(empty())))
+        .andExpect(jsonPath(history(isin), everyItem(comparesEqualTo(600.0))));
+    mvc.perform(get(INVESTMENTS).header("Authorization", auth)).andExpect(status().isOk())
+        .andExpect(jsonPath(position(isin, "lastPrice"), contains(comparesEqualTo(60.0))));
     verify(yahoo, times(1)).weekly(anyString());
   }
 
@@ -112,9 +124,9 @@ class PricesTests {
     when(yahoo.weekly(isin)).thenThrow(new IOException("Yahoo Finance: HTTP 429"));
 
     for (int i = 0; i < 3; i++) {
-      mvc.perform(get(GRAPH).header("Authorization", auth)).andExpect(status().isOk())
-          .andExpect(jsonPath("$.uniqueGraphNames", hasItem(SampleData.ETF_ISIN)))
-          .andExpect(jsonPath("$.uniqueGraphNames", not(hasItem(isin))));
+      mvc.perform(get(INVESTMENTS).header("Authorization", auth)).andExpect(status().isOk())
+          .andExpect(jsonPath(position(SampleData.ETF_ISIN, "lastPrice"), contains(notNullValue())))
+          .andExpect(jsonPath(position(isin, "excluded")).value("NO_PRICE"));
     }
     verify(yahoo, times(1)).weekly(isin);
     // the made-up ISIN of the sample data is never asked
@@ -132,15 +144,15 @@ class PricesTests {
     });
 
     long start = System.currentTimeMillis();
-    mvc.perform(get(GRAPH).header("Authorization", auth)).andExpect(status().isOk())
-        .andExpect(jsonPath("$.uniqueGraphNames", not(hasItem(isin))));
+    mvc.perform(get(INVESTMENTS).header("Authorization", auth)).andExpect(status().isOk())
+        .andExpect(jsonPath(position(isin, "excluded")).value("NO_PRICE"));
     long took = System.currentTimeMillis() - start;
-    assertTrue(took < 1400, "the graph waited " + took + " ms");
+    assertTrue(took < 1400, "the page waited " + took + " ms");
 
     // the download went on in the background, into the schema of this user
     Thread.sleep(2500);
-    mvc.perform(get(GRAPH).header("Authorization", auth)).andExpect(status().isOk())
-        .andExpect(jsonPath("$.uniqueGraphNames", hasItem(isin)));
+    mvc.perform(get(INVESTMENTS).header("Authorization", auth)).andExpect(status().isOk())
+        .andExpect(jsonPath(position(isin, "lastPrice"), contains(comparesEqualTo(60.0))));
     verify(yahoo, times(1)).weekly(isin);
   }
 }

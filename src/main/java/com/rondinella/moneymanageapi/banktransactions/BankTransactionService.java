@@ -5,7 +5,6 @@ import com.opencsv.exceptions.CsvValidationException;
 import com.rondinella.moneymanageapi.brokertransactions.DegiroCsv;
 import com.rondinella.moneymanageapi.categories.Categorizer;
 import com.rondinella.moneymanageapi.common.Utils;
-import com.rondinella.moneymanageapi.common.dtos.GraphPointsDto;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.http.HttpStatus;
@@ -41,14 +40,6 @@ public class BankTransactionService {
     this.bankTransactionRepository = bankTransactionRepository;
     this.dailyBalanceRepository = dailyBalanceRepository;
     this.categorizer = categorizer;
-  }
-
-  public List<BankTransactionDto> findAllTransactions() {
-    return bankTransactionMapper.toDto(bankTransactionRepository.findAll());
-  }
-
-  public List<BankTransactionDto> findTransactionsByAccount(String accountName) {
-    return bankTransactionMapper.toDto(bankTransactionRepository.findTransactionByAccountOrderByDatetimeAscIdAsc(accountName));
   }
 
   public List<String> findAllAccounts() {
@@ -94,21 +85,6 @@ public class BankTransactionService {
     return true;
   }
 
-  /** Balance of the account at the end of that day: the cumulative amount of its last transaction until then. */
-  public BigDecimal amountOnThatDay(String accountName, Timestamp thatDay) {
-    BankTransaction last = bankTransactionRepository.findFirstByAccountAndDatetimeLessThanEqualOrderByDatetimeDescIdDesc(accountName, thatDay);
-    return last == null || last.getCumulativeAmount() == null ? BigDecimal.ZERO : last.getCumulativeAmount();
-  }
-
-  public List<DailyBalance> getDailyBalance(String account) {
-    return dailyBalanceRepository.findByAccountOrderByDate(account);
-  }
-
-  public List<BankTransactionDto> historyBetweenDates(Timestamp startTimestamp, Timestamp endTimestamp, String account) {
-    List<BankTransaction> bankTransactions = bankTransactionRepository.findByDatetimeBetweenAndAccount(startTimestamp, endTimestamp, account);
-    return bankTransactionMapper.toDto(bankTransactions);
-  }
-
   public Map<String, BigDecimal> getDailyDepositSum(String account, Timestamp startTimestamp, Timestamp endTimestamp) {
     List<Object[]> results = bankTransactionRepository.findDailyDepositSumByAccountAndDateRange(account, startTimestamp, endTimestamp);
     Map<String, BigDecimal> dailyDepositSumMap = new LinkedHashMap<>();
@@ -121,39 +97,7 @@ public class BankTransactionService {
     return dailyDepositSumMap;
   }
 
-  public GraphPointsDto historyBetweenDates(Timestamp startTimestamp, Timestamp endTimestamp) {
-    Utils.requireSaneRange(startTimestamp, endTimestamp);
-    GraphPointsDto result = new GraphPointsDto();
-    List<String> daysList = Utils.getAllDaysBetweenTimestamps(startTimestamp, endTimestamp);
-    List<String> accounts = bankTransactionRepository.findDistinctAccounts();
-
-    LocalDate from = startTimestamp.toLocalDateTime().toLocalDate();
-    LocalDate to = endTimestamp.toLocalDateTime().toLocalDate();
-
-    for (String account : accounts) {
-      List<DailyBalance> snapshots = dailyBalanceRepository.findByAccountAndDateBetweenOrderByDate(account, from, to);
-      Map<String, BigDecimal> points = new LinkedHashMap<>();
-      if (!snapshots.isEmpty()) {
-        for (DailyBalance snapshot : snapshots) {
-          points.put(snapshot.getDate().toString(), snapshot.getBalance());
-        }
-      } else {
-        // Fallback: compute from raw transactions
-        List<BankTransaction> bankTransactions = bankTransactionRepository.findByDatetimeBetweenAndAccountOrderByDatetimeAscIdAsc(startTimestamp, endTimestamp, account);
-        for (BankTransaction bankTransaction : bankTransactions) {
-          String simpleDate = Utils.convertTimestampToString(bankTransaction.getDatetime());
-          points.put(simpleDate, bankTransaction.getCumulativeAmount());
-        }
-      }
-      result.addPoints(account, points);
-    }
-
-    result.addTotalColumn("Total cash", accounts);
-    result.SetLabelsAndFillMissingValues(daysList);
-    return result;
-  }
-
-  /** Movements typed or sent by the user (source MANUAL). See {@link #addTransactions(List, BankTransaction.Source)}. */
+  /** Movements added by the server, the sample data (source MANUAL). See {@link #addTransactions(List, BankTransaction.Source)}. */
   public List<BankTransactionDto> addTransactions(List<BankTransactionDto> bankTransactionDto) {
     return addTransactions(bankTransactionDto, BankTransaction.Source.MANUAL);
   }

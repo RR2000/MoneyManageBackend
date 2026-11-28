@@ -6,14 +6,10 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.sql.Timestamp;
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 
 public interface StockRepository extends JpaRepository<Stock, StockId> {
-  ArrayList<Stock> findAllByIsin(String isin);
-  ArrayList<Stock> findAllByIsinAndDatetimeBetween(String isin, Timestamp from, Timestamp to);
-
   List<Stock> findAllByIsinAndDatetimeBetweenOrderByDatetime(String isin, Timestamp from, Timestamp to);
 
   List<Stock> findAllByIsinAndSymbolInAndDatetimeBetweenOrderByDatetime(String isin, Collection<String> symbols,

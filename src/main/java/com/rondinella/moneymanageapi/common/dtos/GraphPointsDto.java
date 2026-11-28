@@ -36,35 +36,8 @@ public class GraphPointsDto implements Serializable {
     }
   }
 
-  public BigDecimal getPointValue(String graphName, String label) {
-    Map<String, BigDecimal> graph = graphData.get(graphName);
-    return graph != null && graph.containsKey(label) ? graph.get(label) : new BigDecimal("-100000");
-  }
-
   public Map<String, BigDecimal> getGraph(String graphName) {
     return graphData.get(graphName);
-  }
-
-  public Map<String, BigDecimal> getLabelValues(String label) {
-    Map<String, BigDecimal> result = new LinkedHashMap<>();
-    uniqueGraphNames.forEach(graphName -> {
-      BigDecimal value = getPointValue(graphName, label);
-      if (value != null) {
-        result.put(graphName, value);
-      }
-    });
-    return result;
-  }
-
-  public void removeLabel(String label) {
-    uniqueLabels.remove(label);
-    graphData.values().forEach(graph -> graph.remove(label));
-  }
-
-  public void setLabels(List<String> labels) {
-    uniqueLabels.clear();
-    uniqueLabels.addAll(labels);
-    validateAndFillMissingValues();
   }
 
   public void removeOrphanLabels() {
@@ -83,30 +56,6 @@ public class GraphPointsDto implements Serializable {
       }
     }
     uniqueLabels.removeAll(labelsToRemove);
-  }
-
-  public void add(GraphPointsDto otherDto) {
-    for (Map.Entry<String, Map<String, BigDecimal>> entry : otherDto.graphData.entrySet()) {
-      String graphName = entry.getKey();
-      Map<String, BigDecimal> points = entry.getValue();
-
-      if (!graphData.containsKey(graphName)) {
-        uniqueGraphNames.add(graphName);
-        graphData.put(graphName, new TreeMap<>());
-      }
-
-      for (Map.Entry<String, BigDecimal> pointEntry : points.entrySet()) {
-        String pointName = pointEntry.getKey();
-        BigDecimal value = pointEntry.getValue();
-        graphData.get(graphName).put(pointName, value);
-        uniqueLabels.add(pointName);
-      }
-    }
-  }
-
-  public void SetLabelsAndFillMissingValues(List<String>labels){
-    validateAndFillMissingValues();
-    setLabels(labels);
   }
 
   public void validateAndFillMissingValues() {
@@ -139,19 +88,6 @@ public class GraphPointsDto implements Serializable {
 
     // If no non-null value is found in previous labels, return null
     return null;
-  }
-
-  /** null for an empty graph (an account without data): it is serialized, it must not throw */
-  public String getFirstLabel() {
-    return uniqueLabels.isEmpty() ? null : ((TreeSet<String>) uniqueLabels).first();
-  }
-
-  public String getLastLabel() {
-    return uniqueLabels.isEmpty() ? null : ((TreeSet<String>) uniqueLabels).last();
-  }
-
-  public void addTotalColumn(String totalColumnName, String... graphNames) {
-    addTotalColumn(totalColumnName, Arrays.asList(graphNames));
   }
 
   public void addTotalColumn(String totalColumnName, List<String> graphNames) {

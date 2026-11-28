@@ -5,6 +5,7 @@ import com.rondinella.moneymanageapi.demo.SampleData;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -28,6 +29,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /** The net worth over time and the newest movements of every account, for the overview. Made-up data only. */
 @SpringBootTest(properties = "app.auth.max-registrations=10000")
 @AutoConfigureMockMvc
+@Import(ManualMovements.class)
 class NetWorthTests {
 
   private static final Pattern TOKEN = Pattern.compile("\"token\"\\s*:\\s*\"([^\"]+)\"");
@@ -39,6 +41,8 @@ class NetWorthTests {
   private static final BigDecimal SAMPLE_GOLD = new BigDecimal("2400");
   private static final BigDecimal SAMPLE_LOAN = new BigDecimal("6200");
 
+  @Autowired
+  ManualMovements movements;
   @Autowired
   MockMvc mvc;
 
@@ -147,10 +151,8 @@ class NetWorthTests {
   void onlyEuroInTheTotalOtherCurrenciesAreCountedApart() throws Exception {
     String auth = register(true);
     long now = LocalDateTime.now().minusHours(1).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli();
-    mvc.perform(post("/api/banks/transactions").header("Authorization", auth).contentType(MediaType.APPLICATION_JSON)
-            .content("[{\"account\":\"Conto in dollari (esempio)\",\"datetime\":" + now
-                + ",\"description\":\"Deposito\",\"amount\":500,\"fee\":0,\"currency\":\"USD\"}]"))
-        .andExpect(status().isCreated());
+    movements.add(auth, "[{\"account\":\"Conto in dollari (esempio)\",\"datetime\":" + now
+        + ",\"description\":\"Deposito\",\"amount\":500,\"fee\":0,\"currency\":\"USD\"}]");
     mvc.perform(post("/api/banks/transactions/accounts/{a}/balance", "Conto in dollari (esempio)")
             .header("Authorization", auth).contentType(MediaType.APPLICATION_JSON).content("{\"amountToday\":500}"))
         .andExpect(status().isOk());

@@ -1,8 +1,8 @@
 package com.rondinella.moneymanageapi;
 
+import com.rondinella.moneymanageapi.banktransactions.AccountPages;
 import com.rondinella.moneymanageapi.demo.SampleData;
 import org.junit.jupiter.api.Test;
-import tools.jackson.databind.json.JsonMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -12,7 +12,6 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 
-import java.time.LocalDate;
 import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -86,37 +85,19 @@ class MoneyManageApiTests {
   @Test
   void sampleDataFillsTheDashboard() throws Exception {
     String auth = register(user(), true);
-    LocalDate today = LocalDate.now();
-    String from = today.minusMonths(6) + " 00:00:00.000";
-    String to = today + " 23:59:59.999";
-
     mvc.perform(get("/api/banks/transactions/accounts").header("Authorization", auth))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$", containsInAnyOrder(SampleData.CHECKING, SampleData.SAVINGS)));
-    String graph = mvc.perform(get("/api/banks/transactions/graph/{from}/{to}", from, to).header("Authorization", auth))
+    // the balance given to the sample data
+    mvc.perform(get("/api/money-accounts/{id}", AccountPages.idOf(SampleData.CHECKING)).header("Authorization", auth))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.uniqueGraphNames", hasItems(SampleData.CHECKING, SampleData.SAVINGS, "Total cash")))
-        .andReturn().getResponse().getContentAsString();
-    // the last point of the checking account is the balance given to the sample data
-    var checking = JsonMapper.builder().build().readTree(graph).get("graphData").get(SampleData.CHECKING);
-    var last = checking.properties().stream().reduce((x, y) -> y).orElseThrow();
-    org.junit.jupiter.api.Assertions.assertEquals(0, last.getValue().decimalValue().compareTo(new java.math.BigDecimal("3480.25")));
-    mvc.perform(get("/api/banks/transactions/table/{from}/{to}", from, to).param("accountName", SampleData.SAVINGS)
-            .header("Authorization", auth))
+        .andExpect(jsonPath("$.balance").value(3480.25));
+    mvc.perform(get("/api/investments").header("Authorization", auth))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$", hasSize(greaterThan(3))));
-    mvc.perform(get("/api/brokers/transactions/worth/graph").header("Authorization", auth))
+        .andExpect(jsonPath("$.positions[*].isin", hasItem(SampleData.ETF_ISIN)));
+    mvc.perform(get("/api/plans").header("Authorization", auth))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.uniqueGraphNames", hasItems(SampleData.ETF_ISIN, "Total Worth")));
-    String mc = mvc.perform(get("/api/montecarlo").param("years", "2").param("simulations", "500").header("Authorization", auth))
-        .andExpect(status().isOk())
-        .andExpect(jsonPath("$.uniqueGraphNames", contains("P25", "P5", "P50", "P75", "P95")))
-        .andReturn().getResponse().getContentAsString();
-    // market returns only (monthly purchases excluded): the median stays in a sane range over two years
-    var p50 = JsonMapper.builder().build().readTree(mc).get("graphData").get("P50").properties().stream()
-        .map(e -> e.getValue().doubleValue()).toList();
-    double growth = p50.getLast() / p50.getFirst();
-    org.junit.jupiter.api.Assertions.assertTrue(growth > 0.7 && growth < 1.6, "P50 growth over 2 years: " + growth);
+        .andExpect(jsonPath("$.plans", hasSize(1)));
     mvc.perform(get("/api/realestate").header("Authorization", auth))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$", hasSize(1)));
@@ -160,10 +141,10 @@ class MoneyManageApiTests {
             .contentType(MediaType.APPLICATION_JSON).content("{\"amountToday\": 96.50}")
             .header("Authorization", auth))
         .andExpect(status().isOk());
-    mvc.perform(get("/api/banks/transactions/accounts/{a}/{t}", "Revolut_Current", "2025-01-02 23:00:00")
+    mvc.perform(get("/api/money-accounts/{id}/balances", AccountPages.idOf("Revolut_Current"))
             .header("Authorization", auth))
         .andExpect(status().isOk())
-        .andExpect(content().string("100.0000"));
+        .andExpect(jsonPath("$[?(@.date == '2025-01-02')].balance", contains(100.0)));
 
     MockMultipartFile bad = new MockMultipartFile("multipartFile", "x.csv", "text/csv", "not,a\nrevolut".getBytes());
     mvc.perform(multipart("/api/banks/transactions/{bank}/upload", "Revolut").file(bad).header("Authorization", auth))
