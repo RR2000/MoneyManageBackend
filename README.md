@@ -53,8 +53,10 @@ sees only its own data.
   last balance and currency, and the `id` of its page (12 hex characters of the SHA-256 of the name: the name never
   goes in a URL). `GET /api/money-accounts/{id}` gives balance, this month's money in and out and whether a bank
   imports there; `GET /api/money-accounts/{id}/balances?from=` the balance at the end of each day;
-  `POST /api/money-accounts/{id}/movements` `{"q","kind":"ALL|IN|OUT","offset","limit"}` the movements newest first,
-  searched by words of the description or by amount (the search travels in the body). `POST /api/money-accounts/delete`
+  `POST /api/money-accounts/{id}/movements` `{"q","kind":"ALL|IN|OUT","uncategorized","offset","limit"}` the movements
+  newest first, searched by words of the description or by amount (the search travels in the body), each with its
+  category; `POST /api/money-accounts/movements` the same over every account (e.g. `{"uncategorized":true}`: the ones
+  still without a category). `POST /api/money-accounts/delete`
   `{"name","confirm"}` deletes an account no bank imports into.
 - **Overview**: `GET /api/net-worth?from=YYYY-MM-DD` gives the net worth on `from` (left out: the first day with
   data), at the end of every month after it and today, oldest first, each split in cash (the balance of every
@@ -100,6 +102,32 @@ sees only its own data.
   at most two decimals and a thousand billion), `CURRENCY` (an ISO 4217 code), `KIND`, `RATE_RANGE` (0 to 100, three
   decimals), `DATE_IN_FUTURE`, `DATE_RANGE` (1900 to 100 years ahead), `TOO_MANY` (500 of a type); an id that is not
   there is a 404.
+- **Categories and fixed costs**: every movement can have a category (`GET|POST /api/categories`,
+  `PUT|DELETE /api/categories/{id}` with `{"name","fixed"}`; `fixed`: a fixed cost, like rent, bills, insurance). Rules
+  give it (`POST /api/categories/rules`, `PUT|DELETE /api/categories/rules/{id}` with
+  `{"categoryId","pattern","direction":"IN|OUT"|null,"accountId"|null}`): a description that contains the text, without
+  caring about upper case and repeated spaces, gets the category; when more rules match, the longest text wins. The
+  rules work on every new movement, from a file, typed in or from the bank (also the next syncs); the movements already
+  there change only with `POST /api/categories/apply` `{"dryRun":true}` (how many would get a category, change it, lose
+  it) and then `{"dryRun":false}`. `PUT /api/movements/{id}/category` `{"categoryId","rule":{"pattern","direction",
+  "onlyThisAccount"}}` chooses the category of one movement by hand (no rule changes it any more; `categoryId` null frees
+  it), optionally with a rule made from it, and answers what "apply" would change after it. Every movement says its
+  category and `categorySource` (`RULE`, `MANUAL`); `GET /api/categories` also counts the movements without one.
+  Deleting a category deletes its rules, its movements stay without one. Codes: `NAME_REQUIRED`, `NAME_TOO_LONG` (60),
+  `NAME_TAKEN`, `TOO_MANY` (200 categories, 1000 rules), `PATTERN_REQUIRED`, `PATTERN_TOO_SHORT` (2), `PATTERN_TOO_LONG`
+  (100), `DIRECTION`, `ACCOUNT`, `CATEGORY`, `RULE_EXISTS`.
+  `GET /api/fixed-costs?months=12` (1 to 36) gives, over the last complete months (this month is not complete; later
+  when the data start later: `monthsUsed`, `from`, `to`), for every fixed category and in all: what went out minus the
+  refunds (`total`), the average a month (`monthly`), the year (`yearly` = monthly x 12, so a cost paid once a year counts
+  for a twelfth every month), this month so far (`thisMonth`); `setAside`, the monthly average rounded up to the next 10
+  euro (`roundingStep`); and what comes next (`upcoming`), for every rule of a fixed category (the movements given by
+  hand without one: one group) and currency: the cadence from the dates of all the payments (one per day), that is the
+  median gap if at least 60% of the gaps are in the same band (`MONTHLY` 26-35 days, `BIMONTHLY` 54-68, `QUARTERLY`
+  82-100, `SEMIANNUAL` 165-200, `ANNUAL` 340-390) with at least 3 payments (2 for half-yearly and yearly), otherwise
+  `UNKNOWN`; `expectedOn` = last payment + cadence (`late` once passed; a whole cadence late it has stopped and is left
+  out), `amount` = median of the last 6 payments. Only euro in the totals: other currencies are in `otherCurrencies`,
+  never converted. The sample data come with seven categories and their rules (four fixed, with a monthly, a
+  two-monthly and a yearly cost); real accounts start with none.
 - **Monte Carlo**: projection of the portfolio from its historical monthly returns (percentiles P5-P95).
 - **Accounts**: registration and login with a JWT, optional "Accedi con GitHub" (an account is found again only by a
   verified GitHub email), optional "forgot password" by email (`POST /api/auth/password/forgot`, then

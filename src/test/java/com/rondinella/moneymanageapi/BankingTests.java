@@ -288,6 +288,8 @@ class BankingTests {
     jdbc.update("DELETE FROM " + SCHEMA + ".bank_link_account");
     jdbc.update("DELETE FROM " + SCHEMA + ".bank_link");
     jdbc.update("DELETE FROM " + SCHEMA + ".bank_transaction");
+    jdbc.update("DELETE FROM " + SCHEMA + ".category_rule");
+    jdbc.update("DELETE FROM " + SCHEMA + ".category");
     jdbc.update("DELETE FROM " + SCHEMA + ".daily_balance");
     jdbc.update("UPDATE public.users SET email = NULL WHERE id = ?", ALICE_ID);
   }
@@ -590,6 +592,30 @@ class BankingTests {
     assertEquals(0, again.get("imported").asInt());
     assertEquals(0, again.get("matched").asInt());
     assertEquals(5, rows("Con_file"));
+  }
+
+  @Test
+  void theRulesGiveTheirCategoryToTheMovementsFromTheBankAlsoTheNextOnes() throws Exception {
+    long bills = JSON.readTree(mvc.perform(post("/api/categories").header("Authorization", alice)
+        .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"Bollette finte\",\"fixed\":true}"))
+        .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString()).get("id").asLong();
+    mvc.perform(post("/api/categories/rules").header("Authorization", alice).contentType(MediaType.APPLICATION_JSON)
+            .content("{\"categoryId\":" + bills + ",\"pattern\":\"luce finta\",\"direction\":\"OUT\"}"))
+        .andExpect(status().isCreated());
+    PAGES.put("", page(null, tx("c-1", "60.00", "DBIT", "2026-10-05", "Bolletta luce finta"),
+        tx("c-2", "5.00", "DBIT", "2026-10-06", "Spesa finta")));
+    long accountId = link();
+    associate(accountId, "Con_regole");
+    assertEquals(List.of("Bolletta luce finta"), jdbc.queryForList("SELECT description FROM " + SCHEMA
+        + ".bank_transaction WHERE category_id = ? AND category_source = 'RULE'", String.class, bills));
+
+    // the next sync: the new movement gets it too
+    PAGES.put("", page(null, tx("c-3", "62.00", "DBIT", "2026-11-05", "BOLLETTA LUCE  FINTA nov")));
+    json(post("/api/banking/sync"));
+    assertEquals(2, jdbc.queryForObject("SELECT count(*) FROM " + SCHEMA + ".bank_transaction WHERE category_id = ?",
+        Integer.class, bills));
+    assertEquals(1, jdbc.queryForObject("SELECT count(*) FROM " + SCHEMA
+        + ".bank_transaction WHERE category_id IS NULL", Integer.class));
   }
 
   @Test

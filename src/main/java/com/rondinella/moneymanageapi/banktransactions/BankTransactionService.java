@@ -3,6 +3,7 @@ package com.rondinella.moneymanageapi.banktransactions;
 import com.opencsv.CSVReader;
 import com.opencsv.exceptions.CsvValidationException;
 import com.rondinella.moneymanageapi.brokertransactions.DegiroCsv;
+import com.rondinella.moneymanageapi.categories.Categorizer;
 import com.rondinella.moneymanageapi.common.Utils;
 import com.rondinella.moneymanageapi.common.dtos.GraphPointsDto;
 import org.apache.poi.ss.usermodel.*;
@@ -32,12 +33,14 @@ public class BankTransactionService {
 
   final BankTransactionRepository bankTransactionRepository;
   final DailyBalanceRepository dailyBalanceRepository;
+  final Categorizer categorizer;
   BankTransactionMapper bankTransactionMapper = BankTransactionMapper.INSTANCE;
 
   public BankTransactionService(BankTransactionRepository bankTransactionRepository,
-                                DailyBalanceRepository dailyBalanceRepository) {
+                                DailyBalanceRepository dailyBalanceRepository, Categorizer categorizer) {
     this.bankTransactionRepository = bankTransactionRepository;
     this.dailyBalanceRepository = dailyBalanceRepository;
+    this.categorizer = categorizer;
   }
 
   public List<BankTransactionDto> findAllTransactions() {
@@ -160,7 +163,8 @@ public class BankTransactionService {
    * counting them: if the list has n movements with the same three and the account already has m, the first min(n, m)
    * existing rows are updated (amount, fee, currency, as before the surrogate key) and only n - m are added. So the same
    * file imported twice gives the same rows, and two equal movements of the same day in one file are both kept (before,
-   * the second overwrote the first). A row matched to a bank movement keeps its bank id.
+   * the second overwrote the first). A row matched to a bank movement keeps its bank id and its category; the rows
+   * added get the category of their rule (see {@link Categorizer}).
    */
   public List<BankTransactionDto> addTransactions(List<BankTransactionDto> bankTransactionDto, BankTransaction.Source source) {
     List<BankTransaction> incoming = bankTransactionMapper.toEntity(bankTransactionDto);
@@ -198,6 +202,7 @@ public class BankTransactionService {
         }
       }
     });
+    categorizer.categorize(toSave.stream().filter(t -> t.getId() == null).toList());
     List<BankTransaction> saved = bankTransactionRepository.saveAllAndFlush(toSave);
     return bankTransactionMapper.toDto(saved);
   }
